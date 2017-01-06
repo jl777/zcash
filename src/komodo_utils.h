@@ -1500,9 +1500,15 @@ void komodo_args()
             fname[strlen(fname)-1] = 0;
         strcat(fname,".komodo/komodo.conf");
 #else
+#ifdef MAC_OSX
+        while ( fname[strlen(fname)-1] != '/' )
+            fname[strlen(fname)-1] = 0;
+        strcat(fname,"Komodo/komodo.conf");
+#else
         while ( fname[strlen(fname)-1] != '/' )
             fname[strlen(fname)-1] = 0;
         strcat(fname,".komodo/komodo.conf");
+#endif
 #endif
         if ( (fp= fopen(fname,"rb")) != 0 )
         {

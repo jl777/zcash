@@ -124,3 +124,9 @@ qa/pull-tester/test.*/*
 libzcashconsensus.pc
 
 src/fiat/-usd
+
+*.dSYM
+komodo-cli
+zcash
+komodo-tx
+komodod
