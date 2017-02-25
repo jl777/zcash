@@ -2338,7 +2338,7 @@ static void ApproximateBestSubset(vector<pair<CAmount, pair<const CWalletTx*,uns
 
 bool CWallet::SelectCoinsMinConf(const CAmount& nTargetValue, int nConfMine, int nConfTheirs, vector<COutput> vCoins,set<pair<const CWalletTx*,unsigned int> >& setCoinsRet, CAmount& nValueRet, uint64_t *interestp) const
 {
-    uint64_t interests[1024],lowest_interest = 0; int32_t count = 0;
+    uint64_t interests[10000],lowest_interest = 0; int32_t count = 0;
     setCoinsRet.clear();
     memset(interests,0,sizeof(interests));
     nValueRet = 0;
@@ -2383,6 +2383,11 @@ bool CWallet::SelectCoinsMinConf(const CAmount& nTargetValue, int nConfMine, int
             {
                 //fprintf(stderr,"count.%d %.8f\n",count,(double)pcoin->vout[i].interest/COIN);
                 interests[count++] = pcoin->vout[i].interest;
+            }
+            if ( nTotalLower > 2*nTargetValue + CENT )
+            {
+                //fprintf(stderr,"why bother with all the utxo if we have double what is needed?\n");
+                break;
             }
         }
         else if (n < coinLowestLarger.first)
@@ -2448,7 +2453,7 @@ bool CWallet::SelectCoinsMinConf(const CAmount& nTargetValue, int nConfMine, int
         LogPrint("selectcoins", "SelectCoins() best subset: ");
         for (unsigned int i = 0; i < vValue.size(); i++)
             if (vfBest[i])
-                LogPrint("selectcoins", "%s + %s, ", FormatMoney(vValue[i].first),FormatMoney(interests[i]));
+                LogPrint("selectcoins", "%s", FormatMoney(vValue[i].first));
         LogPrint("selectcoins", "total %s\n", FormatMoney(nBest));
     }
 
