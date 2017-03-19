@@ -2768,8 +2768,7 @@ static bool ActivateBestChainStep(CValidationState &state, CBlockIndex *pindexMo
         if (!DisconnectTip(state))
             return false;
     }
-    /*fprintf(stderr,"chaintip %d vs rewind.%d\n",(int32_t)chainActive.Tip()->nHeight,KOMODO_REWIND);
-    if ( KOMODO_REWIND != 0 && chainActive.Tip()->nHeight >= KOMODO_REWIND )
+    /*if ( KOMODO_REWIND != 0 && chainActive.Tip()->nHeight >= KOMODO_REWIND )
     {
         fprintf(stderr,"rewind ht.%d\n",chainActive.Tip()->nHeight);
         while ( chainActive.Tip()->nHeight > KOMODO_REWIND )
@@ -3916,7 +3915,7 @@ bool LoadBlockIndex()
         return false;
     }
     KOMODO_LOADINGBLOCKS = 0;
-    fprintf(stderr,"finished loading blocks\n");
+    fprintf(stderr,"finished loading blocks %s\n",ASSETCHAINS_SYMBOL);
     return true;
 }
 
