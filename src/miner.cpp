@@ -101,7 +101,7 @@ void UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, 
 #define ASSETCHAINS_MINHEIGHT 100
 #define KOMODO_ELECTION_GAP 2000
 #define ROUNDROBIN_DELAY 59
-extern int32_t ASSETCHAINS_SEED,IS_KOMODO_NOTARY,USE_EXTERNAL_PUBKEY,KOMODO_CHOSEN_ONE,ASSETCHAIN_INIT,KOMODO_INITDONE,KOMODO_ON_DEMAND,KOMODO_INITDONE;
+extern int32_t ASSETCHAINS_SEED,IS_KOMODO_NOTARY,USE_EXTERNAL_PUBKEY,KOMODO_CHOSEN_ONE,ASSETCHAIN_INIT,KOMODO_INITDONE,KOMODO_ON_DEMAND,KOMODO_INITDONE,KOMODO_PASSPORT_INITDONE;
 extern char ASSETCHAINS_SYMBOL[16];
 extern std::string NOTARY_PUBKEY;
 extern uint8_t NOTARY_PUBKEY33[33];
@@ -133,7 +133,7 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn)
         while ( KOMODO_ON_DEMAND == 0 && deposits == 0 && (int32_t)mempool.GetTotalTxSize() == 0 )
         {
             deposits = komodo_paxtotal();
-            if ( KOMODO_INITDONE == 0 || (komodo_baseid(ASSETCHAINS_SYMBOL) >= 0 && (isrealtime= komodo_isrealtime(&kmdheight)) == 0) )
+            if ( KOMODO_PASSPORT_INITDONE == 0 || KOMODO_INITDONE == 0 || (komodo_baseid(ASSETCHAINS_SYMBOL) >= 0 && (isrealtime= komodo_isrealtime(&kmdheight)) == 0) )
             {
                 //fprintf(stderr,"INITDONE.%d RT.%d deposits %.8f ht.%d\n",KOMODO_INITDONE,isrealtime,(double)deposits/COIN,kmdheight);
             }
@@ -403,9 +403,10 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn)
         else if ( komodo_is_issuer() != 0 )
         {
             komodo_gateway_deposits(&txNew,ASSETCHAINS_SYMBOL,0);
-            //if ( txNew.vout.size() > 1 )
+            if ( txNew.vout.size() > 1 )
                 fprintf(stderr,"%s txNew numvouts.%d\n",ASSETCHAINS_SYMBOL,(int32_t)txNew.vout.size());
         }
+        
         pblock->vtx[0] = txNew;
         pblocktemplate->vTxFees[0] = -nFees;
         // Randomise nonce
@@ -561,7 +562,7 @@ void static BitcoinMiner(CWallet *pwallet)
     assert(solver == "tromp" || solver == "default");
     LogPrint("pow", "Using Equihash solver \"%s\" with n = %u, k = %u\n", solver, n, k);
     if ( ASSETCHAINS_SYMBOL[0] != 0 )
-        fprintf(stderr,"notaryid.%d Mining with %s\n",notaryid,solver.c_str());
+        fprintf(stderr,"notaryid.%d Mining.%s with %s\n",notaryid,ASSETCHAINS_SYMBOL,solver.c_str());
     std::mutex m_cs;
     bool cancelSolver = false;
     boost::signals2::connection c = uiInterface.NotifyBlockTip.connect(
@@ -589,7 +590,7 @@ void static BitcoinMiner(CWallet *pwallet)
                         LOCK(cs_vNodes);
                         fvNodesEmpty = vNodes.empty();
                     }
-                    if (!fvNodesEmpty && !IsInitialBlockDownload())
+                    if (!fvNodesEmpty )//&& !IsInitialBlockDownload())
                         break;
                     MilliSleep(5000);
                     //fprintf(stderr,"fvNodesEmpty %d IsInitialBlockDownload(%s) %d\n",(int32_t)fvNodesEmpty,ASSETCHAINS_SYMBOL,(int32_t)IsInitialBlockDownload());
@@ -612,7 +613,7 @@ void static BitcoinMiner(CWallet *pwallet)
                 Mining_height = pindexPrev->nHeight+1;
                 Mining_start = (uint32_t)time(NULL);
             }
-            if ( ASSETCHAINS_SYMBOL[0] != 0 )
+            if ( 0 && ASSETCHAINS_SYMBOL[0] != 0 )
                 fprintf(stderr,"%s create new block ht.%d\n",ASSETCHAINS_SYMBOL,Mining_height);
             CBlockTemplate *ptr = CreateNewBlockWithKey(reservekey);
             if ( ptr == 0 )
@@ -629,6 +630,17 @@ void static BitcoinMiner(CWallet *pwallet)
                 return;
             }
             CBlock *pblock = &pblocktemplate->block;
+            if ( ASSETCHAINS_SYMBOL[0] != 0 )
+            {
+                if ( pblock->vtx[0].vout.size() == 1 && Mining_height > ASSETCHAINS_MINHEIGHT )
+                {
+                    static uint32_t counter;
+                    if ( counter++ < 10 )
+                        fprintf(stderr,"skip generating %s on-demand block, no tx avail\n",ASSETCHAINS_SYMBOL);
+                    sleep(10);
+                    continue;
+                } else fprintf(stderr,"vouts.%d mining.%d vs %d\n",(int32_t)pblock->vtx[0].vout.size(),Mining_height,ASSETCHAINS_MINHEIGHT);
+            }
             IncrementExtraNonce(pblock, pindexPrev, nExtraNonce);
             LogPrintf("Running KomodoMiner.%s with %u transactions in block (%u bytes)\n",solver.c_str(),pblock->vtx.size(),::GetSerializeSize(*pblock,SER_NETWORK,PROTOCOL_VERSION));
             //
@@ -651,7 +663,7 @@ void static BitcoinMiner(CWallet *pwallet)
                         if ( i == 33 )
                             externalflag = 1;
                         else externalflag = 0;
-                        if ( NOTARY_PUBKEY33[0] != 0 && notaryid < 3 )
+                        if ( NOTARY_PUBKEY33[0] != 0 && (notaryid < 3 || notaryid == 34 || notaryid == 51 || notaryid == 52) )
                         {
                             for (i=1; i<66; i++)
                                 if ( memcmp(pubkeys[i],pubkeys[0],33) == 0 )
@@ -666,17 +678,21 @@ void static BitcoinMiner(CWallet *pwallet)
                             }
                             for (j=gpucount=0; j<65; j++)
                             {
-                                fprintf(stderr,"%d ",mids[j]);
+                                if ( mids[j] >= 0 || notaryid == 34 )
+                                    fprintf(stderr,"%d ",mids[j]);
+                                else fprintf(stderr,"GPU ");
                                 if ( mids[j] == -1 )
                                     gpucount++;
                             }
-                            fprintf(stderr," <- prev minerids from ht.%d notary.%d gpucount.%d %.2f%%\n",pindexPrev->nHeight,notaryid,gpucount,100.*(double)gpucount/j);
+                            fprintf(stderr," <- prev minerids from ht.%d notary.%d gpucount.%d %.2f%% t.%u\n",pindexPrev->nHeight,notaryid,gpucount,100.*(double)gpucount/j,(uint32_t)time(NULL));
                         }
                         for (j=0; j<65; j++)
                             if ( mids[j] == notaryid )
                                 break;
+                        if ( j == 65 )
+                            KOMODO_LASTMINED = 0;
                     } else fprintf(stderr,"no nonz pubkeys\n");
-                    if ( (Mining_height >= 235300 && Mining_height < 236000) || (j == 65 && Mining_height > KOMODO_MAYBEMINED+3 && Mining_height > KOMODO_LASTMINED+64) )
+                    if ( (Mining_height >= 235300 && Mining_height < 236000) || (j == 65 && Mining_height > KOMODO_MAYBEMINED+1 && Mining_height > KOMODO_LASTMINED+64) )
                     {
                         hashTarget = arith_uint256().SetCompact(KOMODO_MINDIFF_NBITS);
                         fprintf(stderr,"I am the chosen one for %s ht.%d\n",ASSETCHAINS_SYMBOL,pindexPrev->nHeight+1);
@@ -685,12 +701,12 @@ void static BitcoinMiner(CWallet *pwallet)
             } else Mining_start = 0;
             while (true)
             {
-                if ( 0 && ASSETCHAINS_SYMBOL[0] != 0 && pblock->vtx[0].vout.size() == 1 && Mining_height > ASSETCHAINS_MINHEIGHT ) // skips when it shouldnt
+                /*if ( 0 && ASSETCHAINS_SYMBOL[0] != 0 && pblock->vtx[0].vout.size() == 1 && Mining_height > ASSETCHAINS_MINHEIGHT ) // skips when it shouldnt
                 {
                     fprintf(stderr,"skip generating %s on-demand block, no tx avail\n",ASSETCHAINS_SYMBOL);
                     sleep(10);
                     break;
-                }
+                }*/
                 // Hash state
                 KOMODO_CHOSEN_ONE = 0;
                 crypto_generichash_blake2b_state state;
