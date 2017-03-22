@@ -100,7 +100,7 @@ void UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, 
 
 #define ASSETCHAINS_MINHEIGHT 100
 #define KOMODO_ELECTION_GAP 2000
-#define ROUNDROBIN_DELAY 59
+#define ROUNDROBIN_DELAY 60
 extern int32_t ASSETCHAINS_SEED,IS_KOMODO_NOTARY,USE_EXTERNAL_PUBKEY,KOMODO_CHOSEN_ONE,ASSETCHAIN_INIT,KOMODO_INITDONE,KOMODO_ON_DEMAND,KOMODO_INITDONE,KOMODO_PASSPORT_INITDONE;
 extern char ASSETCHAINS_SYMBOL[16];
 extern std::string NOTARY_PUBKEY;
@@ -183,7 +183,8 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn)
         pblock->nTime = GetAdjustedTime();
         const int64_t nMedianTimePast = pindexPrev->GetMedianTimePast();
         CCoinsViewCache view(pcoinsTip);
-
+        uint32_t expired;
+        
         // Priority order to process transactions
         list<COrphan> vOrphan; // list memory doesn't move
         map<uint256, vector<COrphan*> > mapDependers;
@@ -201,9 +202,14 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn)
                                     ? nMedianTimePast
                                     : pblock->GetBlockTime();
 
-            if (tx.IsCoinBase() || !IsFinalTx(tx, nHeight, nLockTimeCutoff,STANDARD_LOCKTIME_VERIFY_FLAGS))
+            if (tx.IsCoinBase() || !IsFinalTx(&expired,tx, nHeight, nLockTimeCutoff,STANDARD_LOCKTIME_VERIFY_FLAGS))
+            {
+                if ( expired != 0 )
+                {
+                    fprintf(stderr,"expire from mempool tx.\n");//(%d %d) %.8f\n",tx.vins.size(),tx.vouts.size(),(double)tx.vouts[0].nValue/COIN);
+                }
                 continue;
-
+            }
             COrphan* porphan = NULL;
             double dPriority = 0;
             CAmount nTotalIn = 0;
@@ -846,7 +852,7 @@ void static BitcoinMiner(CWallet *pwallet)
                 }
                 if ((UintToArith256(pblock->nNonce) & 0xffff) == 0xffff)
                 {
-                    if ( 0 && ASSETCHAINS_SYMBOL[0] != 0 )
+                    //if ( 0 && ASSETCHAINS_SYMBOL[0] != 0 )
                         fprintf(stderr,"0xffff, break\n");
                     break;
                 }
