@@ -219,6 +219,7 @@ static void fscalar_product32(limb *output, const limb *in, const limb scalar) {
  * form, the output is not.
  *
  * output[x] <= 14 * the largest product of the input limbs.
+ */
  static void fproduct(limb *output, const limb *in2, const limb *in) {
  output[0] =       ((limb) ((s32) in2[0])) * ((s32) in[0]);
  output[1] =       ((limb) ((s32) in2[0])) * ((s32) in[1]) +
@@ -320,7 +321,7 @@ static void fscalar_product32(limb *output, const limb *in, const limb scalar) {
  output[17] =      ((limb) ((s32) in2[8])) * ((s32) in[9]) +
  ((limb) ((s32) in2[9])) * ((s32) in[8]);
  output[18] = 2 *  ((limb) ((s32) in2[9])) * ((s32) in[9]);
- }*/
+ }
 
 /* Reduce a long form to a short form by taking the input mod 2^255 - 19.
  *
@@ -448,6 +449,7 @@ static void freduce_coefficients(limb *output) {
  *
  * output must be distinct to both inputs. The output is reduced degree
  * (indeed, one need only provide storage for 10 limbs) and |output[i]| < 2^26.
+ */
  static void fmul32(limb *output, const limb *in, const limb *in2)
  {
  limb t[19];
@@ -457,7 +459,7 @@ static void freduce_coefficients(limb *output) {
  freduce_coefficients(t);
  // |t[i]| < 2^26
  memcpy(output, t, sizeof(limb) * 10);
- }*/
+ }
 
 /* Square a number: output = in**2
  *
@@ -1000,6 +1002,37 @@ int32_t komodo_kvsigverify(uint8_t *buf,int32_t len,uint256 _pubkey,uint256 sig)
         //else printf("VALIDATED\n");
     }
     return(0);
+}
+
+/* Take a little-endian, 32-byte number and expand it into polynomial form */
+static void fexpand32(limb *output, const u8 *input)
+{
+#define F(n,start,shift,mask) \
+  output[n] = ((((limb) input[start + 0]) | \
+                ((limb) input[start + 1]) << 8 | \
+                ((limb) input[start + 2]) << 16 | \
+                ((limb) input[start + 3]) << 24) >> shift) & mask;
+  F(0, 0, 0, 0x3ffffff);
+  F(1, 3, 2, 0x1ffffff);
+  F(2, 6, 3, 0x3ffffff);
+  F(3, 9, 5, 0x1ffffff);
+  F(4, 12, 6, 0x3ffffff);
+  F(5, 16, 0, 0x1ffffff);
+  F(6, 19, 1, 0x3ffffff);
+  F(7, 22, 3, 0x1ffffff);
+  F(8, 25, 4, 0x3ffffff);
+  F(9, 28, 6, 0x1ffffff);
+#undef F
+}
+
+bits256 fmul_donna(bits256 a,bits256 b)
+{
+    limb avals[10],bvals[10],z[11]; bits256 result;
+    fexpand32(avals,a.bytes);
+    fexpand32(bvals,b.bytes);
+    fmul32(z,avals,bvals);
+    fcontract32(result.bytes,z);
+    return(result);
 }
 
 #endif
