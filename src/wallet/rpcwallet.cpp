@@ -84,6 +84,24 @@ UniValue z_getoperationstatus_IMPL(const UniValue&, bool);
 #define PLAN_NAME_MAX   8
 #define VALID_PLAN_NAME(x)  (strlen(x) <= PLAN_NAME_MAX)
 
+int tx_height( const uint256 &hash ){
+    int nHeight = 0;
+    CTransaction tx;
+    uint256 hashBlock;
+    if (!GetTransaction(hash, tx, hashBlock, true)) {
+        fprintf(stderr,"tx hash %s does not exist!\n", hash.ToString().c_str() );
+    }
+
+    BlockMap::const_iterator it = mapBlockIndex.find(hashBlock);
+    if (it != mapBlockIndex.end()) {
+        nHeight = it->second->GetHeight();
+        fprintf(stderr,"blockHash %s height %d\n",hashBlock.ToString().c_str(), nHeight);
+    } else {
+        fprintf(stderr,"block hash %s does not exist!\n", hashBlock.ToString().c_str() );
+    }
+    return nHeight;
+}
+
 std::string HelpRequiringPassphrase()
 {
     return pwalletMain && pwalletMain->IsCrypted()
@@ -2963,28 +2981,17 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
 
         for (auto & entry : sproutEntries) {
             UniValue obj(UniValue::VOBJ);
-            int nHeight = 0;
-            CTransaction tx;
-            uint256 hashBlock;
+
+            int nHeight          = tx_height(hash);
+            int komodo_dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
+            // Only return notarized results when minconf>1
+            if (nMinDepth > 1 && komodo_dpowconfs == 1)
+                continue;
 
             obj.push_back(Pair("txid", entry.jsop.hash.ToString()));
             obj.push_back(Pair("jsindex", (int)entry.jsop.js ));
             obj.push_back(Pair("jsoutindex", (int)entry.jsop.n));
-
-            if (!GetTransaction(entry.jsop.hash, tx, hashBlock, true)) {
-                // TODO: should we throw JSONRPCError ?
-                fprintf(stderr,"tx hash %s does not exist!\n", entry.jsop.hash.ToString().c_str() );
-            }
-
-            BlockMap::const_iterator it = mapBlockIndex.find(hashBlock);
-            if (it != mapBlockIndex.end()) {
-                nHeight = it->second->GetHeight();
-                fprintf(stderr,"blockHash %s height %d\n",hashBlock.ToString().c_str(), nHeight);
-            } else {
-                // TODO: should we throw JSONRPCError ?
-                fprintf(stderr,"block hash %s does not exist!\n", hashBlock.ToString().c_str() );
-            }
-            obj.push_back(Pair("confirmations", komodo_dpowconfs(nHeight, entry.confirmations)));
+            obj.push_back(Pair("confirmations", komodo_dpowconfs));
             obj.push_back(Pair("rawconfirmations", entry.confirmations));
             bool hasSproutSpendingKey = pwalletMain->HaveSproutSpendingKey(boost::get<libzcash::SproutPaymentAddress>(entry.address));
             obj.push_back(Pair("spendable", hasSproutSpendingKey));
@@ -3000,25 +3007,17 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
 
         for (auto & entry : saplingEntries) {
             UniValue obj(UniValue::VOBJ);
+
+            int nHeight          = tx_height(hash);
+            int komodo_dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
+
+            // Only return notarized results when minconf>1
+            if (nMinDepth > 1 && komodo_dpowconfs == 1)
+                continue;
+
             obj.push_back(Pair("txid", entry.op.hash.ToString()));
             obj.push_back(Pair("outindex", (int)entry.op.n));
-            int nHeight = 0;
-            CTransaction tx;
-            uint256 hashBlock;
-            if (!GetTransaction(entry.op.hash, tx, hashBlock, true)) {
-                // TODO: should we throw JSONRPCError ?
-                fprintf(stderr,"tx hash %s does not exist!\n", entry.op.hash.ToString().c_str() );
-            }
-
-            BlockMap::const_iterator it = mapBlockIndex.find(hashBlock);
-            if (it != mapBlockIndex.end()) {
-                nHeight = it->second->GetHeight();
-                fprintf(stderr,"blockHash %s height %d\n",hashBlock.ToString().c_str(), nHeight);
-            } else {
-                // TODO: should we throw JSONRPCError ?
-                fprintf(stderr,"block hash %s does not exist!\n", hashBlock.ToString().c_str() );
-            }
-            obj.push_back(Pair("confirmations", komodo_dpowconfs(nHeight, entry.confirmations)));
+            obj.push_back(Pair("confirmations", komodo_dpowconfs));
             obj.push_back(Pair("rawconfirmations", entry.confirmations));
             libzcash::SaplingIncomingViewingKey ivk;
             libzcash::SaplingFullViewingKey fvk;
@@ -3038,7 +3037,6 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
 
     return results;
 }
-
 
 UniValue fundrawtransaction(const UniValue& params, bool fHelp)
 {
@@ -3796,21 +3794,11 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
     if (boost::get<libzcash::SproutPaymentAddress>(&zaddr) != nullptr) {
         for (CSproutNotePlaintextEntry & entry : sproutEntries) {
             UniValue obj(UniValue::VOBJ);
-            int nHeight = 0;
-            CTransaction tx;
-            uint256 hashBlock;
-
-            if (GetTransaction(entry.jsop.hash, tx, hashBlock, true)) {
-                BlockMap::const_iterator it = mapBlockIndex.find(hashBlock);
-                if (it != mapBlockIndex.end()) {
-                    nHeight = it->second->GetHeight();
-                    fprintf(stderr,"blockHash %s height %d\n",hashBlock.ToString().c_str(), nHeight);
-                } else {
-                    fprintf(stderr,"block hash %s does not exist!\n", hashBlock.ToString().c_str() );
-                }
-            } else {
-                fprintf(stderr,"tx hash %s does not exist!\n", entry.jsop.hash.ToString().c_str() );
-            }
+            int nHeight          = tx_height(entry.jsop.hash);
+            int komodo_dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
+            // Only return notarized results when minconf>1
+            if (nMinDepth > 1 && komodo_dpowconfs == 1)
+                continue;
 
             obj.push_back(Pair("txid", entry.jsop.hash.ToString()));
             obj.push_back(Pair("amount", ValueFromAmount(CAmount(entry.plaintext.value()))));
@@ -3828,21 +3816,12 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
     } else if (boost::get<libzcash::SaplingPaymentAddress>(&zaddr) != nullptr) {
         for (SaplingNoteEntry & entry : saplingEntries) {
             UniValue obj(UniValue::VOBJ);
-            int nHeight = 0;
-            CTransaction tx;
-            uint256 hashBlock;
+            int nHeight          = tx_height(entry.op.hash);
+            int komodo_dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
+            // Only return notarized results when minconf>1
+            if (nMinDepth > 1 && komodo_dpowconfs == 1)
+                continue;
 
-            if (GetTransaction(entry.op.hash, tx, hashBlock, true)) {
-                BlockMap::const_iterator it = mapBlockIndex.find(hashBlock);
-                if (it != mapBlockIndex.end()) {
-                    nHeight = it->second->GetHeight();
-                    fprintf(stderr,"blockHash %s height %d\n",hashBlock.ToString().c_str(), nHeight);
-                } else {
-                    fprintf(stderr,"block hash %s does not exist!\n", hashBlock.ToString().c_str() );
-                }
-            } else {
-                fprintf(stderr,"tx hash %s does not exist!\n", entry.op.hash.ToString().c_str() );
-            }
             obj.push_back(Pair("txid", entry.op.hash.ToString()));
             obj.push_back(Pair("amount", ValueFromAmount(CAmount(entry.note.value()))));
             obj.push_back(Pair("memo", HexStr(entry.memo)));
