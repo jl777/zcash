@@ -26,6 +26,8 @@
 
 #define KOMODO_ASSETCHAINS_WAITNOTARIZE
 #define KOMODO_PAXMAX (10000 * COIN)
+extern int32_t NOTARIZED_HEIGHT;
+uint256 NOTARIZED_HASH,NOTARIZED_DESTTXID;
 
 #include <stdint.h>
 #include <stdio.h>
@@ -878,6 +880,13 @@ void komodo_connectblock(CBlockIndex *pindex,CBlock& block)
                      printf("[%s] ht.%d txi.%d signedmask.%llx numvins.%d numvouts.%d <<<<<<<<<<<  notarized\n",ASSETCHAINS_SYMBOL,height,i,(long long)signedmask,numvins,numvouts);
                 }
                 notarized = 1;
+            }
+            // simulate DPoW in regtest mode for dpowconfs tests/etc
+            if ( Params().NetworkIDString() == "regtest" && ( height%7 == 0) ) {
+                notarized          = 1;
+                NOTARIZED_HEIGHT   = height;
+                NOTARIZED_HASH     = block.GetHash();
+                NOTARIZED_DESTTXID = txhash;
             }
             if ( IS_KOMODO_NOTARY != 0 && ASSETCHAINS_SYMBOL[0] == 0 )
                 printf("(tx.%d: ",i);
