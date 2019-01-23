@@ -6,8 +6,8 @@
 
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import assert_equal, initialize_chain_clean, \
-    start_node, stop_node, wait_bitcoinds, start_nodes
-
+    start_node, stop_node, wait_bitcoinds, start_nodes, \
+    assert_greater_than_or_equal
 
 class DPoWConfsTest(BitcoinTestFramework):
 
@@ -78,12 +78,22 @@ class DPoWConfsTest(BitcoinTestFramework):
         rpc.generate(1)
         minconf = 2
         result = rpc.listreceivedbyaddress(minconf)
-        print result
+        print "listreceivedbyaddress(2)=", result
 
+        # this will be empty because there are no notarized xtns
         for res in result:
             print res
             # there should be no entries with 1 dpowconf, since we asked for minconf=2
             assert( result[0]['confirmations'] >= minconf )
+
+        # this is a notarized block
+        rpc.generate(1)
+        result = rpc.listreceivedbyaddress(minconf)
+        assert( len(result), 'got results')
+        print "listreceivedbyaddress(2)=", result
+        for res in result:
+            # there should be no entries with 1 dpowconf, since we asked for minconf=2
+            assert_greater_than_or_equal( result[0]['confirmations'] , minconf )
 
 
 if __name__ == '__main__':
