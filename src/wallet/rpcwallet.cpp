@@ -2982,10 +2982,10 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
         for (auto & entry : sproutEntries) {
             UniValue obj(UniValue::VOBJ);
 
-            int nHeight          = tx_height(hash);
-            int komodo_dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
+            int nHeight   = tx_height(entry.jsop.hash);
+            int dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
             // Only return notarized results when minconf>1
-            if (nMinDepth > 1 && komodo_dpowconfs == 1)
+            if (nMinDepth > 1 && dpowconfs == 1)
                 continue;
 
             obj.push_back(Pair("txid", entry.jsop.hash.ToString()));
@@ -3008,11 +3008,11 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
         for (auto & entry : saplingEntries) {
             UniValue obj(UniValue::VOBJ);
 
-            int nHeight          = tx_height(hash);
-            int komodo_dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
+            int nHeight   = tx_height(entry.op.hash);
+            int dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
 
             // Only return notarized results when minconf>1
-            if (nMinDepth > 1 && komodo_dpowconfs == 1)
+            if (nMinDepth > 1 && dpowconfs == 1)
                 continue;
 
             obj.push_back(Pair("txid", entry.op.hash.ToString()));
@@ -3794,10 +3794,10 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
     if (boost::get<libzcash::SproutPaymentAddress>(&zaddr) != nullptr) {
         for (CSproutNotePlaintextEntry & entry : sproutEntries) {
             UniValue obj(UniValue::VOBJ);
-            int nHeight          = tx_height(entry.jsop.hash);
-            int komodo_dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
+            int nHeight   = tx_height(entry.jsop.hash);
+            int dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
             // Only return notarized results when minconf>1
-            if (nMinDepth > 1 && komodo_dpowconfs == 1)
+            if (nMinDepth > 1 && dpowconfs == 1)
                 continue;
 
             obj.push_back(Pair("txid", entry.jsop.hash.ToString()));
@@ -3816,10 +3816,10 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
     } else if (boost::get<libzcash::SaplingPaymentAddress>(&zaddr) != nullptr) {
         for (SaplingNoteEntry & entry : saplingEntries) {
             UniValue obj(UniValue::VOBJ);
-            int nHeight          = tx_height(entry.op.hash);
-            int komodo_dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
+            int nHeight   = tx_height(entry.op.hash);
+            int dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
             // Only return notarized results when minconf>1
-            if (nMinDepth > 1 && komodo_dpowconfs == 1)
+            if (nMinDepth > 1 && dpowconfs == 1)
                 continue;
 
             obj.push_back(Pair("txid", entry.op.hash.ToString()));
