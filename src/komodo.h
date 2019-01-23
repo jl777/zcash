@@ -883,10 +883,10 @@ void komodo_connectblock(CBlockIndex *pindex,CBlock& block)
             }
             // simulate DPoW in regtest mode for dpowconfs tests/etc
             if ( Params().NetworkIDString() == "regtest" && ( height%7 == 0) ) {
-                notarized          = 1;
-                NOTARIZED_HEIGHT   = height;
-                NOTARIZED_HASH     = block.GetHash();
-                NOTARIZED_DESTTXID = txhash;
+                notarized              = 1;
+                sp->NOTARIZED_HEIGHT   = height;
+                sp->NOTARIZED_HASH     = block.GetHash();
+                sp->NOTARIZED_DESTTXID = txhash;
             }
             if ( IS_KOMODO_NOTARY != 0 && ASSETCHAINS_SYMBOL[0] == 0 )
                 printf("(tx.%d: ",i);
