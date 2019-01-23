@@ -1488,8 +1488,10 @@ UniValue ListReceived(const UniValue& params, bool fByAccounts)
         if (wtx.IsCoinBase() || !CheckFinalTx(wtx))
             continue;
 
-        int nDepth = wtx.GetDepthInMainChain();
-        if (nDepth < nMinDepth)
+        int nHeight   = tx_height(wtx.GetHash());
+        int nDepth    = wtx.GetDepthInMainChain();
+        int dpowconfs = komodo_dpowconfs(nHeight, nDepth);
+        if (dpowconfs < nMinDepth)
             continue;
 
         BOOST_FOREACH(const CTxOut& txout, wtx.vout)
