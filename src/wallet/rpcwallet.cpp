@@ -95,7 +95,7 @@ int tx_height( const uint256 &hash ){
     BlockMap::const_iterator it = mapBlockIndex.find(hashBlock);
     if (it != mapBlockIndex.end()) {
         nHeight = it->second->GetHeight();
-        fprintf(stderr,"blockHash %s height %d\n",hashBlock.ToString().c_str(), nHeight);
+        //fprintf(stderr,"blockHash %s height %d\n",hashBlock.ToString().c_str(), nHeight);
     } else {
         fprintf(stderr,"block hash %s does not exist!\n", hashBlock.ToString().c_str() );
     }

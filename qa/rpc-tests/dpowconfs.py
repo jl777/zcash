@@ -10,6 +10,13 @@ from test_framework.util import assert_equal, initialize_chain_clean, \
     assert_greater_than_or_equal
 
 class DPoWConfsTest(BitcoinTestFramework):
+    def debug_info(self):
+        rpc = self.nodes[0]
+        print "-- DEBUG --"
+        print "getinfo=", rpc.getinfo()
+        print "getwalletinfo=", rpc.getwalletinfo()
+        print "listreceivedbyaddress=", rpc.listreceivedbyaddress()
+        print "-- DEBUG --"
 
     def setup_chain(self):
         self.num_nodes = 1
@@ -51,16 +58,17 @@ class DPoWConfsTest(BitcoinTestFramework):
         blockhashes = rpc.generate(101)
         # block 98, this is 0 indexed
         notarizedhash = blockhashes[97]
-        print rpc.getinfo()
-        print rpc.getwalletinfo()
+        self.debug_info()
 
         taddr = rpc.getnewaddress()
         rpc.sendtoaddress(taddr, 5.55)
+        # blocks 102,103
         rpc.generate(2)
+        self.debug_info()
 
         info = rpc.getinfo()
-        print "notarizedhash=", notarizedhash
-        print "info[notarizedhash]", info['notarizedhash']
+        print "notarizedhash=", notarizedhash, "\n"
+        print "info[notarizedhash]", info['notarizedhash'], "\n"
         assert_equal( info['notarizedhash'], notarizedhash)
 
         result = rpc.listunspent()
@@ -72,29 +80,33 @@ class DPoWConfsTest(BitcoinTestFramework):
                 assert_equal( result[0]['confirmations'], 1 )
                 assert_equal( result[0]['rawconfirmations'], 2 )
 
-        print rpc.listreceivedbyaddress()
-
         # we will now have 3 rawconfs but confirmations=1 because not notarized
+        # block 104
         rpc.generate(1)
+        self.debug_info()
         minconf = 2
-        result = rpc.listreceivedbyaddress(minconf)
-        print "listreceivedbyaddress(2)=", result
+        result  = rpc.listreceivedbyaddress(minconf)
+        print "listreceivedbyaddress(2)=", result, "\n"
 
-        # this will be empty because there are no notarized xtns
-        for res in result:
-            print res
-            # there should be no entries with 1 dpowconf, since we asked for minconf=2
-            assert( result[0]['confirmations'] >= minconf )
+        # nothing is notarized, so we should see no results for minconf=2
+        assert len(result) == 0
 
-        # this is a notarized block
+        # generate a notarized block, block 105
         rpc.generate(1)
-        result = rpc.listreceivedbyaddress(minconf)
-        assert( len(result), 'got results')
-        print "listreceivedbyaddress(2)=", result
-        for res in result:
-            # there should be no entries with 1 dpowconf, since we asked for minconf=2
-            assert_greater_than_or_equal( result[0]['confirmations'] , minconf )
+        self.debug_info()
 
+        getinfo = rpc.getinfo()
+        # make sure this block was notarized as we expect
+        assert_equal(getinfo['blocks'], getinfo['notarized'])
+
+        result = rpc.listreceivedbyaddress(minconf)
+        print "listreceivedbyaddress(2)=", result
+
+        assert_equal( len(result), 1,  'got one xtn with minconf=2' )
+
+        # verify we see the correct dpowconfs + rawconfs
+        assert_equal( result[0]['confirmations'], 4)
+        assert_equal( result[0]['rawconfirmations'], 4)
 
 if __name__ == '__main__':
     DPoWConfsTest().main()

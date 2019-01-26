@@ -413,12 +413,14 @@ def assert_true(condition, message = ""):
 def assert_false(condition, message = ""):
     assert_true(not condition, message)
 
+# assert thing2 > thing1
 def assert_greater_than(thing1, thing2):
     if thing1 <= thing2:
         raise AssertionError("%s <= %s"%(str(thing1),str(thing2)))
 
+# assert thing2 >= thing1
 def assert_greater_than_or_equal(thing1, thing2):
-    if thing1 < thing2:
+    if thing2 < thing1:
         raise AssertionError("%s < %s"%(str(thing1),str(thing2)))
 
 def assert_raises(exc, fun, *args, **kwds):
