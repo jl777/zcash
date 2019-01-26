@@ -420,7 +420,7 @@ def assert_greater_than(thing1, thing2):
 
 # assert thing2 >= thing1
 def assert_greater_than_or_equal(thing1, thing2):
-    if thing2 < thing1:
+    if thing1 < thing2:
         raise AssertionError("%s < %s"%(str(thing1),str(thing2)))
 
 def assert_raises(exc, fun, *args, **kwds):
