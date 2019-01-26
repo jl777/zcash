@@ -951,9 +951,20 @@ UniValue getreceivedbyaddress(const UniValue& params, bool fHelp)
             continue;
 
         BOOST_FOREACH(const CTxOut& txout, wtx.vout)
-            if (txout.scriptPubKey == scriptPubKey)
-                if (wtx.GetDepthInMainChain() >= nMinDepth)
-                    nAmount += txout.nValue; // komodo_interest?
+            if (txout.scriptPubKey == scriptPubKey) {
+                int nDepth    = wtx.GetDepthInMainChain();
+                if( nMinDepth > 1 ) {
+                    int nHeight    = tx_height(wtx.GetHash());
+                    int dpowconfs  = komodo_dpowconfs(nHeight, nDepth);
+                    if (dpowconfs >= nMinDepth) {
+                        nAmount   += txout.nValue; // komodo_interest?
+                    }
+                } else {
+                    if (nDepth  >= nMinDepth) {
+                        nAmount += txout.nValue; // komodo_interest?
+                    }
+                }
+            }
     }
 
     return  ValueFromAmount(nAmount);
@@ -1488,11 +1499,16 @@ UniValue ListReceived(const UniValue& params, bool fByAccounts)
         if (wtx.IsCoinBase() || !CheckFinalTx(wtx))
             continue;
 
-        int nHeight   = tx_height(wtx.GetHash());
         int nDepth    = wtx.GetDepthInMainChain();
-        int dpowconfs = komodo_dpowconfs(nHeight, nDepth);
-        if (dpowconfs < nMinDepth)
-            continue;
+        if( nMinDepth > 1 ) {
+            int nHeight   = tx_height(wtx.GetHash());
+            int dpowconfs = komodo_dpowconfs(nHeight, nDepth);
+            if (dpowconfs < nMinDepth)
+                continue;
+        } else {
+            if (nDepth < nMinDepth)
+                continue;
+        }
 
         BOOST_FOREACH(const CTxOut& txout, wtx.vout)
         {
@@ -2767,8 +2783,16 @@ UniValue listunspent(const UniValue& params, bool fHelp)
     LOCK2(cs_main, pwalletMain->cs_wallet);
     pwalletMain->AvailableCoins(vecOutputs, false, NULL, true);
     BOOST_FOREACH(const COutput& out, vecOutputs) {
-        if (out.nDepth < nMinDepth || out.nDepth > nMaxDepth)
-            continue;
+        int nDepth    = out.tx->GetDepthInMainChain();
+        if( nMinDepth > 1 ) {
+            int nHeight    = tx_height(out.tx->GetHash());
+            int dpowconfs  = komodo_dpowconfs(nHeight, nDepth);
+            if (dpowconfs < nMinDepth || dpowconfs > nMaxDepth)
+                continue;
+        } else {
+            if (out.nDepth < nMinDepth || out.nDepth > nMaxDepth)
+                continue;
+        }
 
         CTxDestination address;
         const CScript& scriptPubKey = out.tx->vout[out.i].scriptPubKey;
