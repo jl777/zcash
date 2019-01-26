@@ -3714,8 +3714,17 @@ CAmount getBalanceTaddr(std::string transparentAddress, int minDepth=1, bool ign
     pwalletMain->AvailableCoins(vecOutputs, false, NULL, true);
 
     BOOST_FOREACH(const COutput& out, vecOutputs) {
-        if (out.nDepth < minDepth) {
-            continue;
+        int nDepth    = out.tx->GetDepthInMainChain();
+        if( minDepth > 1 ) {
+            int nHeight    = tx_height(out.tx->GetHash());
+            int dpowconfs  = komodo_dpowconfs(nHeight, nDepth);
+            if (dpowconfs < minDepth) {
+                continue;
+            }
+        } else {
+            if (out.nDepth < minDepth) {
+                continue;
+            }
         }
 
         if (ignoreUnspendable && !out.fSpendable) {
