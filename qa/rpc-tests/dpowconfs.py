@@ -110,6 +110,13 @@ class DPoWConfsTest(BitcoinTestFramework):
         self.debug_info()
 
         getinfo = rpc.getinfo()
+        # try to allow notarization data to update
+        print "Sleeping"
+        while (getinfo['blocks'] != 106) or (getinfo['notarized'] != 105):
+            printf(".")
+            time.sleep(1)
+            getinfo = rpc.getinfo()
+
         # make sure this block was notarized as we expect
         #assert_equal(getinfo['blocks'], getinfo['notarized'])
         #assert_equal(getinfo['notarizedhash'], txids[0])
