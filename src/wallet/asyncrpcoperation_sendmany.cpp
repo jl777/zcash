@@ -1052,7 +1052,7 @@ bool AsyncRPCOperation_sendmany::find_utxos(bool fAcceptCoinbase=false) {
         }
 
         if( mindepth_ > 1 ) {
-            int nHeight    = tx_height(out.GetHash());
+            int nHeight    = tx_height(out.tx->GetHash());
             int dpowconfs  = komodo_dpowconfs(nHeight, out.nDepth);
             if (dpowconfs < mindepth_) {
                 continue;
