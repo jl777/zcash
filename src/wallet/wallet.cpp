@@ -66,6 +66,7 @@ extern char ASSETCHAINS_SYMBOL[KOMODO_ASSETCHAIN_MAXLEN];
 extern int32_t VERUS_MIN_STAKEAGE;
 CBlockIndex *komodo_chainactive(int32_t height);
 extern std::string DONATION_PUBKEY;
+int32_t komodo_dpowconfs(int32_t height,int32_t numconfs);
 
 /**
  * Fees smaller than this (in satoshi) are considered zero fee (for transaction creation)
@@ -4887,11 +4888,21 @@ void CWallet::GetFilteredNotes(
         CWalletTx wtx = p.second;
 
         // Filter the transactions before checking for notes
-        if (!CheckFinalTx(wtx) ||
-            wtx.GetBlocksToMaturity() > 0 ||
-            wtx.GetDepthInMainChain() < minDepth ||
-            wtx.GetDepthInMainChain() > maxDepth) {
+        if (!CheckFinalTx(wtx) || wtx.GetBlocksToMaturity() > 0)
             continue;
+
+        if (minDepth > 1) {
+            int nHeight    = tx_height(wtx.GetHash());
+            int nDepth     = wtx.GetDepthInMainChain();
+            int dpowconfs  = komodo_dpowconfs(nHeight,nDepth);
+            if ( dpowconfs < minDepth || dpowconfs > maxDepth) {
+                continue;
+            }
+        } else {
+            if ( wtx.GetDepthInMainChain() < minDepth ||
+                wtx.GetDepthInMainChain() > maxDepth) {
+                continue;
+            }
         }
 
         for (auto & pair : wtx.mapSproutNoteData) {
