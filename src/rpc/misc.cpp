@@ -72,12 +72,13 @@ extern char ASSETCHAINS_SYMBOL[KOMODO_ASSETCHAIN_MAXLEN];
 uint32_t komodo_segid32(char *coinaddr);
 int64_t komodo_coinsupply(int64_t *zfundsp,int64_t *sproutfundsp,int32_t height);
 int32_t notarizedtxid_height(char *dest,char *txidstr,int32_t *kmdnotarized_heightp);
-#define KOMODO_VERSION "0.3.3"
+#define KOMODO_VERSION "0.3.3b"
 #define VERUS_VERSION "0.4.0g"
 extern uint16_t ASSETCHAINS_P2PPORT,ASSETCHAINS_RPCPORT;
 extern uint32_t ASSETCHAINS_CC;
 extern uint32_t ASSETCHAINS_MAGIC;
-extern uint64_t ASSETCHAINS_COMMISSION,ASSETCHAINS_STAKED,ASSETCHAINS_SUPPLY,ASSETCHAINS_LASTERA;
+extern uint64_t ASSETCHAINS_COMMISSION,ASSETCHAINS_STAKED,ASSETCHAINS_SUPPLY;
+extern uint32_t ASSETCHAINS_LASTERA;
 extern int32_t ASSETCHAINS_LWMAPOS,ASSETCHAINS_SAPLING;
 extern uint64_t ASSETCHAINS_ENDSUBSIDY[],ASSETCHAINS_REWARD[],ASSETCHAINS_HALVING[],ASSETCHAINS_DECAY[];
 extern std::string NOTARY_PUBKEY; extern uint8_t NOTARY_PUBKEY33[];
@@ -224,7 +225,7 @@ UniValue getinfo(const UniValue& params, bool fHelp)
                 }
             }
             if (ASSETCHAINS_LASTERA > 0)
-                obj.push_back(Pair("eras", ASSETCHAINS_LASTERA + 1));
+                obj.push_back(Pair("eras", (int64_t)(ASSETCHAINS_LASTERA + 1)));
             obj.push_back(Pair("reward", acReward));
             obj.push_back(Pair("halving", acHalving));
             obj.push_back(Pair("decay", acDecay));
