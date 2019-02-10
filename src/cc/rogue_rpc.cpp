@@ -693,15 +693,17 @@ UniValue rogue_register(uint64_t txfee,struct CCcontract_info *cp,cJSON *params)
                 CCaddr1of2set(cp,roguepk,roguepk,cp->CCpriv,destaddr);
                 mtx.vout.push_back(MakeTokensCC1vout(cp->evalcode, 1, CPubKey() /*nullpk*/));
 
-                std::vector<uint8_t> vopretFinish, vopret2; uint8_t e, f; uint256 tokenid; std::vector<CPubKey> voutPubkeys, voutPubkeysEmpty; int32_t didtx = 0;
+                std::vector<uint8_t> vopretFinish, vopret2; uint8_t e, funcId; uint256 tokenid; std::vector<CPubKey> voutPubkeys, voutPubkeysEmpty; int32_t didtx = 0;
                 CScript opretRegister = rogue_registeropret(gametxid, playertxid);
                 if ( playertxid != zeroid )
                 {
                     if ( GetTransaction(playertxid,playertx,hashBlock,false) != 0 )
                     {
-                        if ( DecodeTokenOpRet(playertx.vout.back().scriptPubKey, e, tokenid, voutPubkeys, vopretFinish, vopret2) != 0)
+                        if ( (funcId = DecodeTokenOpRet(playertx.vout.back().scriptPubKey, e, tokenid, voutPubkeys, vopretFinish, vopret2)) != 0)
                         {  // if token in the opret
                             didtx = 1;
+                            if (funcId == 'c') // create tx itself
+                                tokenid = playertxid;
                             rawtx = FinalizeCCTx(0, cp, mtx, mypk, txfee,
                                                  EncodeTokenOpRet(tokenid, voutPubkeysEmpty /*=never spent*/, vopretFinish /*=non-fungible*/, opretRegister));
                         }
