@@ -15,8 +15,6 @@
 
 
 #include "komodo_defs.h"
-//int tx_height( const uint256 &hash );
-
 #include "komodo_cJSON.h"
 
 #define KOMODO_MAINNET_START 178999
