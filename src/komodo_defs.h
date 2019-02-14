@@ -74,5 +74,6 @@ extern int32_t VERUS_MIN_STAKEAGE;
 extern std::string DONATION_PUBKEY;
 extern uint8_t ASSETCHAINS_PRIVATE;
 extern int32_t USE_EXTERNAL_PUBKEY;
+int tx_height( const uint256 &hash );
 
 #endif

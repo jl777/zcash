@@ -466,25 +466,6 @@ int32_t komodo_dpowconfs(int32_t txheight,int32_t numconfs)
     return(numconfs);
 }
 
-inline int tx_height( const uint256 &hash ){
-    int nHeight = 0;
-    CTransaction tx;
-    uint256 hashBlock;
-    if (!GetTransaction(hash, tx, hashBlock, true)) {
-        fprintf(stderr,"tx hash %s does not exist!\n", hash.ToString().c_str() );
-    }
-
-    BlockMap::const_iterator it = mapBlockIndex.find(hashBlock);
-    if (it != mapBlockIndex.end()) {
-        nHeight = it->second->GetHeight();
-        //fprintf(stderr,"blockHash %s height %d\n",hashBlock.ToString().c_str(), nHeight);
-    } else {
-        fprintf(stderr,"block hash %s does not exist!\n", hashBlock.ToString().c_str() );
-    }
-    return nHeight;
-}
-
-
 int32_t komodo_MoMdata(int32_t *notarized_htp,uint256 *MoMp,uint256 *kmdtxidp,int32_t height,uint256 *MoMoMp,int32_t *MoMoMoffsetp,int32_t *MoMoMdepthp,int32_t *kmdstartip,int32_t *kmdendip)
 {
     struct notarized_checkpoint *np = 0;
