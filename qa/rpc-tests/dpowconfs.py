@@ -65,7 +65,7 @@ class DPoWConfsTest(BitcoinTestFramework):
         self.debug_info()
 
         taddr = rpc.getnewaddress()
-        rpc.sendtoaddress(taddr, 5.55)
+        txid  = rpc.sendtoaddress(taddr, 5.55)
         # blocks 102,103
         rpc.generate(2)
         self.debug_info()
@@ -99,9 +99,13 @@ class DPoWConfsTest(BitcoinTestFramework):
         received = rpc.getreceivedbyaddress(taddr, minconf)
         assert_equal( received, 0.00000000)
 
-        #TODO: minconf=1 should not use dpowconfs
         #received = rpc.getreceivedbyaddress(taddr)
         #assert_equal( received, "5.55000000")
+	taddr = rpc.getnewaddress()
+	zaddr = rpc.z_getnewaddress()
+	# should get insufficient funds error
+	recipients = [ { "amount" : Decimal('4.20'), "address" : zaddr } ]
+	txid  = rpc.z_sendmany( taddr, recipients, minconf)
 
         # generate a notarized block, block 105 and block 106
         # only generating the notarized block seems to have
