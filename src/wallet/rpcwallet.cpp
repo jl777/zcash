@@ -3125,7 +3125,7 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
             obj.push_back(Pair("txid", entry.jsop.hash.ToString()));
             obj.push_back(Pair("jsindex", (int)entry.jsop.js ));
             obj.push_back(Pair("jsoutindex", (int)entry.jsop.n));
-            obj.push_back(Pair("confirmations", komodo_dpowconfs));
+            obj.push_back(Pair("confirmations", dpowconfs));
             obj.push_back(Pair("rawconfirmations", entry.confirmations));
             bool hasSproutSpendingKey = pwalletMain->HaveSproutSpendingKey(boost::get<libzcash::SproutPaymentAddress>(entry.address));
             obj.push_back(Pair("spendable", hasSproutSpendingKey));
@@ -3151,7 +3151,7 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
 
             obj.push_back(Pair("txid", entry.op.hash.ToString()));
             obj.push_back(Pair("outindex", (int)entry.op.n));
-            obj.push_back(Pair("confirmations", komodo_dpowconfs));
+            obj.push_back(Pair("confirmations", dpowconfs));
             obj.push_back(Pair("rawconfirmations", entry.confirmations));
             libzcash::SaplingIncomingViewingKey ivk;
             libzcash::SaplingFullViewingKey fvk;
@@ -3950,7 +3950,7 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
             obj.push_back(Pair("jsindex", entry.jsop.js));
             obj.push_back(Pair("jsoutindex", entry.jsop.n));
             obj.push_back(Pair("rawconfirmations", entry.confirmations));
-            obj.push_back(Pair("confirmations", komodo_dpowconfs(nHeight, entry.confirmations)));
+            obj.push_back(Pair("confirmations", dpowconfs));
             if (hasSpendingKey) {
                 obj.push_back(Pair("change", pwalletMain->IsNoteSproutChange(nullifierSet, entry.address, entry.jsop)));
             }
@@ -3971,7 +3971,7 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
             obj.push_back(Pair("memo", HexStr(entry.memo)));
             obj.push_back(Pair("outindex", (int)entry.op.n));
             obj.push_back(Pair("rawconfirmations", entry.confirmations));
-            obj.push_back(Pair("confirmations", komodo_dpowconfs(nHeight, entry.confirmations)));
+            obj.push_back(Pair("confirmations", dpowconfs));
             if (hasSpendingKey) {
               obj.push_back(Pair("change", pwalletMain->IsNoteSaplingChange(nullifierSet, entry.address, entry.op)));
             }
