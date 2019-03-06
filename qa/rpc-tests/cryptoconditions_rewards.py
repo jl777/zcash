@@ -15,12 +15,16 @@ from cryptoconditions import assert_success, assert_error, generate_random_strin
 class CryptoconditionsRewardsTest(CryptoconditionsTestFramework):
 
     def run_rewards_tests(self):
+
+        rpc = self.nodes[0]
+
+        result = rpc.rewardsaddress()
         for x in ['myCCaddress', 'myaddress', 'RewardsCCAddress', 'RewardsCCTokensAddress', 'RewardsNormalAddress']:
             assert_equal(result[x][0], 'R')
 
         result = rpc.rewardsaddress(self.pubkey)
         for x in ['myCCaddress', 'myaddress', 'RewardsCCAddress', 'RewardsCCTokensAddress', 'RewardsNormalAddress']:
-             assert_equal(result[x][0], 'R')
+            assert_equal(result[x][0], 'R')
 
         # no rewards yet
         result = rpc.rewardslist()
