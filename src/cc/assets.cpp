@@ -468,9 +468,10 @@ bool AssetsValidate(struct CCcontract_info *cpAssets,Eval* eval,const CTransacti
     }
 
     // what does this do?
-	bool bPrevent = PreventCC(eval, tx, preventCCvins, numvins, preventCCvouts, numvouts);
+	//bool bPrevent = PreventCC(eval, tx, preventCCvins, numvins, preventCCvouts, numvouts);  // seems we do not need this call as we already checked vouts well
 	//std::cerr << "AssetsValidate() PreventCC returned=" << bPrevent << std::endl;
-	return (bPrevent);
+	//return (bPrevent);
+    return true;
 }
 
 
