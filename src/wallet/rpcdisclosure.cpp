@@ -2,6 +2,21 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+/******************************************************************************
+ * Copyright © 2014-2019 The SuperNET Developers.                             *
+ *                                                                            *
+ * See the AUTHORS, DEVELOPER-AGREEMENT and LICENSE files at                  *
+ * the top-level directory of this distribution for the individual copyright  *
+ * holder information and the developer policies on copyright and licensing.  *
+ *                                                                            *
+ * Unless otherwise agreed in a custom licensing agreement, no part of the    *
+ * SuperNET software, including this file may be copied, modified, propagated *
+ * or distributed except according to the terms contained in the LICENSE file *
+ *                                                                            *
+ * Removal or modification of this copyright notice is prohibited.            *
+ *                                                                            *
+ ******************************************************************************/
+
 #include "rpc/server.h"
 #include "init.h"
 #include "key_io.h"
@@ -42,7 +57,7 @@ UniValue z_getpaymentdisclosure(const UniValue& params, bool fHelp)
         return NullUniValue;
 
     string enableArg = "paymentdisclosure";
-    auto fEnablePaymentDisclosure = fExperimentalMode && GetBoolArg("-" + enableArg, false);
+    auto fEnablePaymentDisclosure = fExperimentalMode && GetBoolArg("-" + enableArg, true);
     string strPaymentDisclosureDisabledMsg = "";
     if (!fEnablePaymentDisclosure) {
         strPaymentDisclosureDisabledMsg = experimentalDisabledHelpMsg("z_getpaymentdisclosure", enableArg);
@@ -149,7 +164,7 @@ UniValue z_validatepaymentdisclosure(const UniValue& params, bool fHelp)
         return NullUniValue;
 
     string enableArg = "paymentdisclosure";
-    auto fEnablePaymentDisclosure = fExperimentalMode && GetBoolArg("-" + enableArg, false);
+    auto fEnablePaymentDisclosure = fExperimentalMode && GetBoolArg("-" + enableArg, true);
     string strPaymentDisclosureDisabledMsg = "";
     if (!fEnablePaymentDisclosure) {
         strPaymentDisclosureDisabledMsg = experimentalDisabledHelpMsg("z_validatepaymentdisclosure", enableArg);

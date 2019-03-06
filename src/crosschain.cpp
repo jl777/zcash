@@ -1,3 +1,18 @@
+/******************************************************************************
+ * Copyright © 2014-2019 The SuperNET Developers.                             *
+ *                                                                            *
+ * See the AUTHORS, DEVELOPER-AGREEMENT and LICENSE files at                  *
+ * the top-level directory of this distribution for the individual copyright  *
+ * holder information and the developer policies on copyright and licensing.  *
+ *                                                                            *
+ * Unless otherwise agreed in a custom licensing agreement, no part of the    *
+ * SuperNET software, including this file may be copied, modified, propagated *
+ * or distributed except according to the terms contained in the LICENSE file *
+ *                                                                            *
+ * Removal or modification of this copyright notice is prohibited.            *
+ *                                                                            *
+ ******************************************************************************/
+
 #include "cc/eval.h"
 #include "crosschain.h"
 #include "importcoin.h"
@@ -51,7 +66,7 @@ uint256 CalculateProofRoot(const char* symbol, uint32_t targetCCid, int kmdHeigh
 
     int seenOwnNotarisations = 0;
 
-    bool txscl = IsTXSCL(symbol);
+    int authority = GetSymbolAuthority(symbol);
 
     for (int i=0; i<NOTARISATION_SCAN_LIMIT_BLOCKS; i++) {
         if (i > kmdHeight) break;
@@ -69,18 +84,25 @@ uint256 CalculateProofRoot(const char* symbol, uint32_t targetCCid, int kmdHeigh
                     destNotarisationTxid = nota.first;
                 else if (seenOwnNotarisations == 2)
                     goto end;
-                break;
+                //break;
             }
         }
 
         if (seenOwnNotarisations == 1) {
             BOOST_FOREACH(Notarisation& nota, notarisations) {
-                if (IsTXSCL(nota.second.symbol) == txscl)
-                    if (nota.second.ccId == targetCCid)
-                        moms.push_back(nota.second.MoM);
+                if (GetSymbolAuthority(nota.second.symbol) == authority)
+                    if (nota.second.ccId == targetCCid) {
+                      moms.push_back(nota.second.MoM);
+                      //fprintf(stderr, "added mom: %s\n",nota.second.MoM.GetHex().data());
+                    }
             }
         }
     }
+
+    // Not enough own notarisations found to return determinate MoMoM
+    destNotarisationTxid = uint256();
+    moms.clear();
+    return uint256();
 
 end:
     return GetMerkleRoot(moms);
@@ -96,8 +118,9 @@ template <typename IsTarget>
 int ScanNotarisationsFromHeight(int nHeight, const IsTarget f, Notarisation &found)
 {
     int limit = std::min(nHeight + NOTARISATION_SCAN_LIMIT_BLOCKS, chainActive.Height());
-    
-    for (int h=nHeight; h<limit; h++) {
+    int start = std::max(nHeight, 1);
+
+    for (int h=start; h<limit; h++) {
         NotarisationsInBlock notarisations;
 
         if (!GetBlockNotarisations(*chainActive[h]->phashBlock, notarisations))
@@ -125,7 +148,7 @@ TxProof GetCrossChainProof(const uint256 txid, const char* targetSymbol, uint32_
      */
     EvalRef eval;
     uint256 MoM = assetChainProof.second.Exec(txid);
-    
+
     // Get a kmd height for given notarisation Txid
     int kmdHeight;
     {
@@ -157,7 +180,7 @@ TxProof GetCrossChainProof(const uint256 txid, const char* targetSymbol, uint32_
     uint256 MoMoM = CalculateProofRoot(targetSymbol, targetCCid, kmdHeight, moms, targetChainNotarisationTxid);
     if (MoMoM.IsNull())
         throw std::runtime_error("No MoMs found");
-    
+
     // Find index of source MoM in MoMoM
     int nIndex;
     for (nIndex=0; nIndex<moms.size(); nIndex++) {
@@ -198,16 +221,14 @@ cont:
  */
 void CompleteImportTransaction(CTransaction &importTx)
 {
-    TxProof proof;
-    CTransaction burnTx;
-    std::vector<CTxOut> payouts;
+    TxProof proof; CTransaction burnTx; std::vector<CTxOut> payouts; std::vector<uint8_t> rawproof;
     if (!UnmarshalImportTx(importTx, proof, burnTx, payouts))
         throw std::runtime_error("Couldn't parse importTx");
 
     std::string targetSymbol;
     uint32_t targetCCid;
     uint256 payoutsHash;
-    if (!UnmarshalBurnTx(burnTx, targetSymbol, &targetCCid, payoutsHash))
+    if (!UnmarshalBurnTx(burnTx, targetSymbol, &targetCCid, payoutsHash, rawproof))
         throw std::runtime_error("Couldn't parse burnTx");
 
     proof = GetCrossChainProof(burnTx.GetHash(), targetSymbol.data(), targetCCid, proof);
@@ -246,18 +267,50 @@ bool GetNextBacknotarisation(uint256 kmdNotarisationTxid, Notarisation &out)
 }
 
 
+bool CheckMoMoM(uint256 kmdNotarisationHash, uint256 momom)
+{
+    /*
+     * Given a notarisation hash and an MoMoM. Backnotarisations may arrive out of order
+     * or multiple in the same block. So dereference the notarisation hash to the corresponding
+     * backnotarisation and scan around the kmdheight to see if the MoMoM is a match.
+     * This is a sledgehammer approach...
+     */
+
+    Notarisation bn;
+    if (!GetBackNotarisation(kmdNotarisationHash, bn))
+        return false;
+
+    // Need to get block height of that backnotarisation
+    EvalRef eval;
+    CBlockIndex block;
+    CTransaction tx;
+    if (!eval->GetTxConfirmed(bn.first, tx, block)){
+        fprintf(stderr, "Can't get height of backnotarisation, this should not happen\n");
+        return false;
+    }
+
+    Notarisation nota;
+    auto checkMoMoM = [&](Notarisation &nota) {
+        return nota.second.MoMoM == momom;
+    };
+
+    return (bool) ScanNotarisationsFromHeight(block.GetHeight()-100, checkMoMoM, nota);
+
+}
+
+
 /*
  * On assetchain
  * in: txid
  * out: pair<notarisationTxHash,merkleBranch>
  */
-TxProof GetAssetchainProof(uint256 hash)
+
+TxProof GetAssetchainProof(uint256 hash,CTransaction burnTx)
 {
     int nIndex;
     CBlockIndex* blockIndex;
     Notarisation nota;
     std::vector<uint256> branch;
-
     {
         uint256 blockHash;
         CTransaction tx;
@@ -278,7 +331,7 @@ TxProof GetAssetchainProof(uint256 hash)
         };
         if (!ScanNotarisationsFromHeight(blockIndex->GetHeight(), isTarget, nota))
             throw std::runtime_error("backnotarisation not yet confirmed");
-        
+
         // index of block in MoM leaves
         nIndex = nota.second.height - blockIndex->GetHeight();
     }
@@ -292,7 +345,7 @@ TxProof GetAssetchainProof(uint256 hash)
         }
         bool fMutated;
         BuildMerkleTree(&fMutated, leaves, tree);
-        branch = GetMerkleBranch(nIndex, leaves.size(), tree); 
+        branch = GetMerkleBranch(nIndex, leaves.size(), tree);
 
         // Check branch
         uint256 ourResult = SafeCheckMerkleBranch(blockIndex->hashMerkleRoot, branch, nIndex);
@@ -331,7 +384,7 @@ TxProof GetAssetchainProof(uint256 hash)
     }
 
     // Check the proof
-    if (nota.second.MoM != CBlock::CheckMerkleBranch(hash, branch, nIndex)) 
+    if (nota.second.MoM != CBlock::CheckMerkleBranch(hash, branch, nIndex))
         throw std::runtime_error("Failed validating MoM");
 
     // All done!

@@ -3,6 +3,21 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+/******************************************************************************
+ * Copyright © 2014-2019 The SuperNET Developers.                             *
+ *                                                                            *
+ * See the AUTHORS, DEVELOPER-AGREEMENT and LICENSE files at                  *
+ * the top-level directory of this distribution for the individual copyright  *
+ * holder information and the developer policies on copyright and licensing.  *
+ *                                                                            *
+ * Unless otherwise agreed in a custom licensing agreement, no part of the    *
+ * SuperNET software, including this file may be copied, modified, propagated *
+ * or distributed except according to the terms contained in the LICENSE file *
+ *                                                                            *
+ * Removal or modification of this copyright notice is prohibited.            *
+ *                                                                            *
+ ******************************************************************************/
+
 #if defined(HAVE_CONFIG_H)
 #include "config/bitcoin-config.h"
 #endif
@@ -76,6 +91,7 @@ using namespace std;
 extern void ThreadSendAlert();
 extern int32_t KOMODO_LOADINGBLOCKS;
 extern bool VERUS_MINTBLOCKS;
+extern char ASSETCHAINS_SYMBOL[];
 
 ZCJoinSplit* pzcashParams = NULL;
 
@@ -195,7 +211,10 @@ void Shutdown()
     /// for example if the data directory was found to be locked.
     /// Be sure that anything that writes files or flushes caches only does this if the respective
     /// module was initialized.
-    RenameThread("verus-shutoff");
+    static char shutoffstr[128];
+    sprintf(shutoffstr,"%s-shutoff",ASSETCHAINS_SYMBOL);
+    //RenameThread("verus-shutoff");
+    RenameThread(shutoffstr);
     mempool.AddTransactionsUpdated(1);
 
     StopHTTPRPC();
@@ -844,7 +863,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     const CChainParams& chainparams = Params();
 
     // Set this early so that experimental features are correctly enabled/disabled
-    fExperimentalMode = GetBoolArg("-experimentalfeatures", false);
+    fExperimentalMode = GetBoolArg("-experimentalfeatures", true);
 
     // Fail early if user has set experimental options without the global flag
     if (!fExperimentalMode) {
@@ -1158,13 +1177,19 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     globalVerifyHandle.reset(new ECCVerifyHandle());
 
     // set the hash algorithm to use for this chain
-    extern uint32_t ASSETCHAINS_ALGO, ASSETCHAINS_VERUSHASH;
+    // Again likely better solution here, than using long IF ELSE. 
+    extern uint32_t ASSETCHAINS_ALGO, ASSETCHAINS_VERUSHASH, ASSETCHAINS_VERUSHASHV1_1;
     CVerusHash::init();
     CVerusHashV2::init();
     if (ASSETCHAINS_ALGO == ASSETCHAINS_VERUSHASH)
     {
         // initialize VerusHash
         CBlockHeader::SetVerusHash();
+    }
+    else if (ASSETCHAINS_ALGO == ASSETCHAINS_VERUSHASHV1_1)
+    {
+        // initialize VerusHashV2
+        CBlockHeader::SetVerusHashV2();
     }
 
     // Sanity check
@@ -1501,7 +1526,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             fReindex = true;
         }
     }
-    
+
     bool clearWitnessCaches = false;
 
     bool fLoaded = false;
@@ -1529,6 +1554,8 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
 
                 if (fReindex) {
+                    boost::filesystem::remove(GetDataDir() / "komodostate");
+                    boost::filesystem::remove(GetDataDir() / "signedmasks");
                     pblocktree->WriteReindexing(true);
                     //If we're reindexing in prune mode, wipe away unusable block files and all undo data files
                     if (fPruneMode)
@@ -1874,9 +1901,9 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     VERUS_MINTBLOCKS = GetBoolArg("-mint", false);
 
     if (pwalletMain || !GetArg("-mineraddress", "").empty())
-        GenerateBitcoins(GetBoolArg("-gen", false), pwalletMain, GetArg("-genproclimit", 0));
+        GenerateBitcoins(GetBoolArg("-gen", false), pwalletMain, GetArg("-genproclimit", -1));
  #else
-    GenerateBitcoins(GetBoolArg("-gen", false), GetArg("-genproclimit", 0));
+    GenerateBitcoins(GetBoolArg("-gen", false), GetArg("-genproclimit", -1));
  #endif
 #endif
 

@@ -3,6 +3,21 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+/******************************************************************************
+ * Copyright © 2014-2019 The SuperNET Developers.                             *
+ *                                                                            *
+ * See the AUTHORS, DEVELOPER-AGREEMENT and LICENSE files at                  *
+ * the top-level directory of this distribution for the individual copyright  *
+ * holder information and the developer policies on copyright and licensing.  *
+ *                                                                            *
+ * Unless otherwise agreed in a custom licensing agreement, no part of the    *
+ * SuperNET software, including this file may be copied, modified, propagated *
+ * or distributed except according to the terms contained in the LICENSE file *
+ *                                                                            *
+ * Removal or modification of this copyright notice is prohibited.            *
+ *                                                                            *
+ ******************************************************************************/
+
 #ifndef BITCOIN_COINS_H
 #define BITCOIN_COINS_H
 
@@ -24,7 +39,7 @@
 #include <boost/foreach.hpp>
 #include <boost/unordered_map.hpp>
 #include "zcash/IncrementalMerkleTree.hpp"
-#include "veruslaunch.h"
+//#include "veruslaunch.h"
 
 /** 
  * Pruned version of CTransaction: only retains metadata and unspent transaction outputs
@@ -431,7 +446,7 @@ class CCoinsViewCache;
 /** 
  * A reference to a mutable cache entry. Encapsulating it allows us to run
  *  cleanup code after the modification is finished, and keeping track of
- *  concurrent modifications. 
+ *  concurrent modifications.
  */
 class CCoinsModifier
 {
@@ -456,7 +471,7 @@ class CTransactionExceptionData
         CTransactionExceptionData() : scriptPubKey(), voutMask() {}
 };
 
-class CLaunchMap
+/*class CLaunchMap
 {
     public:
         std::unordered_map<std::string, CTransactionExceptionData> lmap;
@@ -477,7 +492,7 @@ class CLaunchMap
             }
         }
 };
-static CLaunchMap launchMap = CLaunchMap();
+static CLaunchMap launchMap = CLaunchMap();*/
 
 /** CCoinsView that adds a memory cache for transactions to another CCoinsView */
 class CCoinsViewCache : public CCoinsViewBacked
@@ -488,7 +503,7 @@ protected:
 
     /**
      * Make mutable so that we can "fill the cache" even from Get-methods
-     * declared as "const".  
+     * declared as "const". 
      */
     mutable uint256 hashBlock;
     mutable CCoinsMap cacheCoins;
@@ -507,7 +522,7 @@ public:
     ~CCoinsViewCache();
 
     // Standard CCoinsView methods
-    static CLaunchMap &LaunchMap() { return launchMap; }
+    //static CLaunchMap &LaunchMap() { return launchMap; }
     bool GetSproutAnchorAt(const uint256 &rt, SproutMerkleTree &tree) const;
     bool GetSaplingAnchorAt(const uint256 &rt, SaplingMerkleTree &tree) const;
     bool GetNullifier(const uint256 &nullifier, ShieldedType type) const;

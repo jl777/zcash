@@ -3,6 +3,21 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+/******************************************************************************
+ * Copyright © 2014-2019 The SuperNET Developers.                             *
+ *                                                                            *
+ * See the AUTHORS, DEVELOPER-AGREEMENT and LICENSE files at                  *
+ * the top-level directory of this distribution for the individual copyright  *
+ * holder information and the developer policies on copyright and licensing.  *
+ *                                                                            *
+ * Unless otherwise agreed in a custom licensing agreement, no part of the    *
+ * SuperNET software, including this file may be copied, modified, propagated *
+ * or distributed except according to the terms contained in the LICENSE file *
+ *                                                                            *
+ * Removal or modification of this copyright notice is prohibited.            *
+ *                                                                            *
+ ******************************************************************************/
+
 #include "amount.h"
 #include "chain.h"
 #include "chainparams.h"
@@ -34,6 +49,7 @@ extern void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& 
 void ScriptPubKeyToJSON(const CScript& scriptPubKey, UniValue& out, bool fIncludeHex);
 int32_t komodo_longestchain();
 int32_t komodo_dpowconfs(int32_t height,int32_t numconfs);
+extern int8_t komodo_segid(int32_t nocache,int32_t height);
 extern int32_t KOMODO_LONGESTCHAIN;
 
 double GetDifficultyINTERNAL(const CBlockIndex* blockindex, bool networkDifficulty)
@@ -132,7 +148,7 @@ UniValue blockheaderToJSON(const CBlockIndex* blockindex)
     result.push_back(Pair("bits", strprintf("%08x", blockindex->nBits)));
     result.push_back(Pair("difficulty", GetDifficulty(blockindex)));
     result.push_back(Pair("chainwork", blockindex->chainPower.chainWork.GetHex()));
-    result.push_back(Pair("segid", (int64_t)blockindex->segid));
+    result.push_back(Pair("segid", (int)komodo_segid(0,blockindex->GetHeight())));
 
     if (blockindex->pprev)
         result.push_back(Pair("previousblockhash", blockindex->pprev->GetBlockHash().GetHex()));
@@ -159,7 +175,7 @@ UniValue blockToDeltasJSON(const CBlock& block, const CBlockIndex* blockindex)
     result.push_back(Pair("height", blockindex->GetHeight()));
     result.push_back(Pair("version", block.nVersion));
     result.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
-    result.push_back(Pair("segid", (int64_t)blockindex->segid));
+    result.push_back(Pair("segid", (int)komodo_segid(0,blockindex->GetHeight())));
 
     UniValue deltas(UniValue::VARR);
 
@@ -277,7 +293,7 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool tx
     result.push_back(Pair("height", blockindex->GetHeight()));
     result.push_back(Pair("version", block.nVersion));
     result.push_back(Pair("merkleroot", block.hashMerkleRoot.GetHex()));
-    result.push_back(Pair("segid", (int64_t)blockindex->segid));
+    result.push_back(Pair("segid", (int)komodo_segid(0,blockindex->GetHeight())));
     result.push_back(Pair("finalsaplingroot", block.hashFinalSaplingRoot.GetHex()));
     UniValue txs(UniValue::VARR);
     BOOST_FOREACH(const CTransaction&tx, block.vtx)
@@ -365,10 +381,11 @@ UniValue getdifficulty(const UniValue& params, bool fHelp)
     return GetNetworkDifficulty();
 }
 
-bool myIsutxo_spentinmempool(uint256 txid,int32_t vout)
+bool myIsutxo_spentinmempool(uint256 &spenttxid,int32_t &spentvini,uint256 txid,int32_t vout)
 {
     //char *uint256_str(char *str,uint256); char str[65];
     //LOCK(mempool.cs);
+    int32_t vini = 0;
     BOOST_FOREACH(const CTxMemPoolEntry &e,mempool.mapTx)
     {
         const CTransaction &tx = e.GetTx();
@@ -377,7 +394,12 @@ bool myIsutxo_spentinmempool(uint256 txid,int32_t vout)
         {
             //fprintf(stderr,"%s/v%d ",uint256_str(str,txin.prevout.hash),txin.prevout.n);
             if ( txin.prevout.n == vout && txin.prevout.hash == txid )
+            {
+                spenttxid = hash;
+                spentvini = vini;
                 return(true);
+            }
+            vini++;
         }
         //fprintf(stderr,"are vins for %s\n",uint256_str(str,hash));
     }
@@ -606,6 +628,68 @@ UniValue getblockhash(const UniValue& params, bool fHelp)
     return pblockindex->GetBlockHash().GetHex();
 }
 
+extern int32_t ASSETCHAINS_STAKED;
+
+UniValue getlastsegidstakes(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "getlastsegidstakes depth\n"
+            "\nReturns object containing the counts of the last X blocks staked by each segid.\n"
+            "\nArguments:\n"
+            "1. depth           (numeric, required) The amount of blocks to scan back."
+            "\nResult:\n"
+            "{\n"
+            "  \"0\" : n,       (numeric) number of stakes from segid 0 in the last X blocks.\n"
+            "  .....\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("getlastsegidstakes", "1000")
+            + HelpExampleRpc("getlastsegidstakes", "1000")
+        );
+
+    if ( ASSETCHAINS_STAKED == 0 )
+        throw runtime_error("Only applies to ac_staked chains\n");
+
+    LOCK(cs_main);
+
+    int depth = params[0].get_int();
+    if ( depth > chainActive.Height() )
+        throw runtime_error("Not enough blocks to scan back that far.\n");
+    
+    int32_t segids[64] = {0};
+    int32_t pow = 0;
+    int32_t notset = 0;
+
+    for (int64_t i = chainActive.Height(); i >  chainActive.Height()-depth; i--)
+    {
+        int8_t segid = komodo_segid(0,i);
+        //CBlockIndex* pblockindex = chainActive[i];
+        if ( segid >= 0 )
+            segids[segid] += 1;
+        else if ( segid == -1 )
+            pow++;
+        else
+            notset++;
+    }
+    
+    int8_t posperc = 100*(depth-pow)/depth;
+    
+    UniValue ret(UniValue::VOBJ);
+    UniValue objsegids(UniValue::VOBJ);
+    for (int8_t i = 0; i < 64; i++)
+    {
+        char str[4];
+        sprintf(str, "%d", i);
+        objsegids.push_back(Pair(str,segids[i]));
+    }
+    ret.push_back(Pair("NotSet",notset));
+    ret.push_back(Pair("PoW",pow));
+    ret.push_back(Pair("PoSPerc",posperc));
+    ret.push_back(Pair("SegIds",objsegids));
+    return ret;
+}
+
 /*uint256 _komodo_getblockhash(int32_t nHeight)
 {
     uint256 hash;
@@ -635,7 +719,8 @@ UniValue getblockheader(const UniValue& params, bool fHelp)
             "\nResult (for verbose = true):\n"
             "{\n"
             "  \"hash\" : \"hash\",     (string) the block hash (same as provided)\n"
-            "  \"confirmations\" : n,   (numeric) The number of confirmations, or -1 if the block is not on the main chain\n"
+            "  \"confirmations\" : n,   (numeric) The number of notarized DPoW confirmations, or -1 if the block is not on the main chain\n"
+            "  \"rawconfirmations\" : n,(numeric) The number of raw confirmations, or -1 if the block is not on the main chain\n"
             "  \"height\" : n,          (numeric) The block height or index\n"
             "  \"version\" : n,         (numeric) The block version\n"
             "  \"merkleroot\" : \"xxxx\", (string) The merkle root\n"
@@ -695,7 +780,8 @@ UniValue getblock(const UniValue& params, bool fHelp)
             "\nResult (for verbosity = 1):\n"
             "{\n"
             "  \"hash\" : \"hash\",       (string) the block hash (same as provided hash)\n"
-            "  \"confirmations\" : n,   (numeric) The number of confirmations, or -1 if the block is not on the main chain\n"
+            "  \"confirmations\" : n,   (numeric) The number of notarized DPoW confirmations, or -1 if the block is not on the main chain\n"
+            "  \"rawconfirmations\" : n,(numeric) The number of raw confirmations, or -1 if the block is not on the main chain\n"
             "  \"size\" : n,            (numeric) The block size\n"
             "  \"height\" : n,          (numeric) The block height or index (same as provided height)\n"
             "  \"version\" : n,         (numeric) The block version\n"
@@ -859,7 +945,7 @@ UniValue kvsearch(const UniValue& params, bool fHelp)
             "  \"currentheight\": xxxxx,     (numeric) current height of the chain\n"
             "  \"key\": \"xxxxx\",           (string) key\n"
             "  \"keylen\": xxxxx,            (string) length of the key \n"
-            "  \"owner\": \"xxxxx\"          (string) hex string representing the owner of the key \n" 
+            "  \"owner\": \"xxxxx\"          (string) hex string representing the owner of the key \n"
             "  \"height\": xxxxx,            (numeric) height the key was stored at\n"
             "  \"expiration\": xxxxx,        (numeric) height the key will expire\n"
             "  \"flags\": x                  (numeric) 1 if the key was created with a password; 0 otherwise.\n"
@@ -1138,7 +1224,8 @@ UniValue gettxout(const UniValue& params, bool fHelp)
             "\nResult:\n"
             "{\n"
             "  \"bestblock\" : \"hash\",    (string) the block hash\n"
-            "  \"confirmations\" : n,       (numeric) The number of confirmations\n"
+            "  \"confirmations\" : n,       (numeric) The number of notarized DPoW confirmations\n"
+            "  \"rawconfirmations\" : n,    (numeric) The number of raw confirmations\n"
             "  \"value\" : x.xxx,           (numeric) The transaction value in " + CURRENCY_UNIT + "\n"
             "  \"scriptPubKey\" : {         (json object)\n"
             "     \"asm\" : \"code\",       (string) \n"
@@ -1191,10 +1278,10 @@ UniValue gettxout(const UniValue& params, bool fHelp)
     BlockMap::iterator it = mapBlockIndex.find(pcoinsTip->GetBestBlock());
     CBlockIndex *pindex = it->second;
     ret.push_back(Pair("bestblock", pindex->GetBlockHash().GetHex()));
-    if ((unsigned int)coins.nHeight == MEMPOOL_HEIGHT)
+    if ((unsigned int)coins.nHeight == MEMPOOL_HEIGHT) {
         ret.push_back(Pair("confirmations", 0));
-    else
-    {
+        ret.push_back(Pair("rawconfirmations", 0));
+    } else {
         ret.push_back(Pair("confirmations", komodo_dpowconfs(coins.nHeight,pindex->GetHeight() - coins.nHeight + 1)));
         ret.push_back(Pair("rawconfirmations", pindex->GetHeight() - coins.nHeight + 1));
     }
