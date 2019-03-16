@@ -14,11 +14,11 @@
  */
  
 std::string MYCCLIBNAME = (char *)"customcc";
+#define MYCCNAME "custom"
 
 #define EVAL_CUSTOM (EVAL_FAUCET2+1)
 #define CUSTOM_TXFEE 10000
 
-#define MYCCNAME "custom"
 
 #define RPC_FUNCS    \
     { (char *)MYCCNAME, (char *)"func0", (char *)"<parameter help>", 1, 1, '0', EVAL_CUSTOM }, \
