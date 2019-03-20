@@ -20,6 +20,7 @@
 #include "clientversion.h"
 
 #include "tinyformat.h"
+#include "util.h"
 
 #include <string>
 
