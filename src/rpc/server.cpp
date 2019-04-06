@@ -441,14 +441,10 @@ static const CRPCCommand vRPCCommands[] =
     { "oracles",       "oraclessamples",   &oraclessamples,     true },
 
     // Prices
+    { "prices",       "prices",      &prices,      true },
     { "prices",       "pricesaddress",      &pricesaddress,      true },
     { "prices",       "priceslist",         &priceslist,         true },
     { "prices",       "pricesinfo",         &pricesinfo,         true },
-    { "prices",       "pricescreate",       &pricescreate,       true },
-    { "prices",       "pricesaddfunding",   &pricesaddfunding,   true },
-    { "prices",       "pricesbet",          &pricesbet,          true },
-    { "prices",       "pricesstatus",       &pricesstatus,       true },
-    { "prices",       "pricesfinish",       &pricesfinish,       true },
 
     // Pegs
     { "pegs",       "pegsaddress",   &pegsaddress,      true },
@@ -466,6 +462,12 @@ static const CRPCCommand vRPCCommands[] =
 
     // Payments
     { "payments",       "paymentsaddress",   &paymentsaddress,      true },
+    { "payments",       "paymentstxidopret", &payments_txidopret,      true },
+    { "payments",       "paymentscreate",    &payments_create,      true },
+    { "payments",       "paymentslist",      &payments_list,      true },
+    { "payments",       "paymentsinfo",      &payments_info,      true },
+    { "payments",       "paymentsfund",      &payments_fund,      true },
+    { "payments",       "paymentsrelease",   &payments_release,      true },
 
     { "CClib",       "cclibaddress",   &cclibaddress,      true },
     { "CClib",       "cclibinfo",   &cclibinfo,      true },

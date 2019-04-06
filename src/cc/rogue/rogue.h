@@ -365,6 +365,7 @@ struct rogue_state
     char *keystrokes,*keystrokeshex;
     uint32_t needflush,replaydone;
     int32_t numkeys,ind,num,guiflag,counter,sleeptime,playersize,restoring,lastnum;
+    FILE *logfp;
     struct rogue_player P;
     char buffered[10000];
     uint8_t playerdata[10000];
@@ -379,7 +380,7 @@ int32_t rogue_restorepack(struct rogue_state *rs);
 void restore_player(struct rogue_state *rs);
 int32_t rogue_replay2(uint8_t *newdata,uint64_t seed,char *keystrokes,int32_t num,struct rogue_player *player,int32_t sleepmillis);
 void rogue_bailout(struct rogue_state *rs);
-void rogue_progress(struct rogue_state *rs,int32_t waitflag,uint64_t seed,char *keystrokes,int32_t num);
+int32_t rogue_progress(struct rogue_state *rs,int32_t waitflag,uint64_t seed,char *keystrokes,int32_t num);
 int32_t rogue_setplayerdata(struct rogue_state *rs,char *gametxidstr);
 
 #define ROGUE_MAXTOTAL (pstats.s_str*2)
@@ -770,7 +771,7 @@ bool	roll_em(THING *thatt, THING *thdef, THING *weap, bool hurl);
 bool	see_monst(THING *mp);
 bool	seen_stairs(void);
 bool	turn_ok(int y, int x);
-bool	turn_see(bool turn_off);
+bool	turn_see(struct rogue_state *rs,bool turn_off);
 bool	is_current(struct rogue_state *rs,THING *obj);
 int	passwd(void);
 
@@ -824,6 +825,7 @@ void	doctor(struct rogue_state *rs,int);
 void	playit(struct rogue_state *rs);
 
 struct room	*roomin(struct rogue_state *rs,coord *cp);
+int32_t thing_find(THING *ptr);
 
 #define MAXDAEMONS 20
 

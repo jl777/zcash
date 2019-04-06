@@ -62,6 +62,25 @@ void init_string(struct return_string *s)
     s->ptr[0] = '\0';
 }
 
+int tx_height( const uint256 &hash ){
+    int nHeight = 0;
+    CTransaction tx;
+    uint256 hashBlock;
+    if (!GetTransaction(hash, tx, hashBlock, true)) {
+        fprintf(stderr,"tx hash %s does not exist!\n", hash.ToString().c_str() );
+    }
+
+    BlockMap::const_iterator it = mapBlockIndex.find(hashBlock);
+    if (it != mapBlockIndex.end()) {
+        nHeight = it->second->GetHeight();
+        //fprintf(stderr,"blockHash %s height %d\n",hashBlock.ToString().c_str(), nHeight);
+    } else {
+        fprintf(stderr,"block hash %s does not exist!\n", hashBlock.ToString().c_str() );
+    }
+    return nHeight;
+}
+
+
 /************************************************************************
  *
  * Use the "writer" to accumulate text until done
@@ -182,6 +201,9 @@ try_again:
     curl_easy_setopt(curl_handle,CURLOPT_WRITEDATA,		&s); 			// we pass our 's' struct to the callback
     curl_easy_setopt(curl_handle,CURLOPT_NOSIGNAL,		1L);   			// supposed to fix "Alarm clock" and long jump crash
     curl_easy_setopt(curl_handle,CURLOPT_NOPROGRESS,	1L);			// no progress callback
+    //curl_easy_setopt(curl_handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+    //curl_easy_setopt(curl_handle, CURLOPT_SSLVERSION, 2);
+
     if ( strncmp(url,"https",5) == 0 )
     {
         curl_easy_setopt(curl_handle,CURLOPT_SSL_VERIFYPEER,0);
@@ -228,13 +250,13 @@ try_again:
         numretries++;
         if ( specialcase != 0 )
         {
-            printf("<<<<<<<<<<< bitcoind_RPC.(%s): BTCD.%s timeout params.(%s) s.ptr.(%s) err.%d\n",url,command,params,s.ptr,res);
+            fprintf(stderr,"<<<<<<<<<<< bitcoind_RPC.(%s): BTCD.%s timeout params.(%s) s.ptr.(%s) err.%d\n",url,command,params,s.ptr,res);
             free(s.ptr);
             return(0);
         }
         else if ( numretries >= 1 )
         {
-            //printf("Maximum number of retries exceeded!\n");
+            fprintf(stderr,"Maximum number of retries exceeded!\n");
             free(s.ptr);
             return(0);
         }
@@ -1215,7 +1237,7 @@ uint64_t komodo_commission(const CBlock *pblock,int32_t height)
             n = pblock->vtx[i].vout.size();
             for (j=0; j<n; j++)
             {
-                if ( height > 100000 && ASSETCHAINS_STAKED != 0 && txn_count > 1 && i == txn_count-1 && j == n-1 )
+                if ( height > 225000 && ASSETCHAINS_STAKED != 0 && txn_count > 1 && i == txn_count-1 && j == n-1 )
                     break;
                 //fprintf(stderr,"(%d %.8f).%d ",i,dstr(pblock->vtx[i].vout[j].nValue),j);
                 if ( i != 0 || j != 1 )
@@ -1604,7 +1626,7 @@ int32_t komodo_is_PoSblock(int32_t slowflag,int32_t height,CBlock *pblock,arith_
                 fprintf(stderr,"ht.%d isPoS.%d utxo not validated -> must be PoW fake\n",height,isPoS);
                 isPoS = 0;
             }
-            else
+            else if ( ASSETCHAINS_STAKED != 100 )
             {
                 if ( bhash < POWTarget )
                 {

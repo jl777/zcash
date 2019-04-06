@@ -60,6 +60,9 @@ bool fPayAtLeastCustomFee = true;
 #include "komodo_defs.h"
 
 CBlockIndex *komodo_chainactive(int32_t height);
+extern std::string DONATION_PUBKEY;
+int32_t komodo_dpowconfs(int32_t height,int32_t numconfs);
+int tx_height( const uint256 &hash );
 
 /**
  * Fees smaller than this (in satoshi) are considered zero fee (for transaction creation)
@@ -1822,12 +1825,12 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransaction& tx, const CBlock* pbl
                         fprintf(stderr, "Received transaction to address other than notary address, ignored! \n");
                         return false;
                     }
-                    fprintf(stderr, "address: %s received %ld sats from %d vouts.\n",NOTARY_ADDRESS.c_str(),totalvoutvalue,numvoutIsOurs);
+                    fprintf(stderr, "address: %s received %ld sats from %d vouts.\n",NOTARY_ADDRESS.c_str(),totalvoutvalue,(int32_t)numvoutIsOurs);
                     // here we add calculation for number if vouts received, average size and determine if we accept them to wallet or not.
                     int64_t avgVoutSize = totalvoutvalue / numvoutIsOurs;
                     if ( avgVoutSize < MIN_RECV_SATS ) {
                         // average vout size is less than set minimum, default is 1 coin, we will ignore it
-                        fprintf(stderr, "ignored: %d vouts average size of %ld sats.\n",numvoutIsOurs, avgVoutSize);
+                        fprintf(stderr, "ignored: %d vouts average size of %ld sats.\n",numvoutIsOurs, (long)avgVoutSize);
                         return false;
                     }
                 }
@@ -4966,11 +4969,21 @@ void CWallet::GetFilteredNotes(
         CWalletTx wtx = p.second;
 
         // Filter the transactions before checking for notes
-        if (!CheckFinalTx(wtx) ||
-            wtx.GetBlocksToMaturity() > 0 ||
-            wtx.GetDepthInMainChain() < minDepth ||
-            wtx.GetDepthInMainChain() > maxDepth) {
+        if (!CheckFinalTx(wtx) || wtx.GetBlocksToMaturity() > 0)
             continue;
+
+        if (minDepth > 1) {
+            int nHeight    = tx_height(wtx.GetHash());
+            int nDepth     = wtx.GetDepthInMainChain();
+            int dpowconfs  = komodo_dpowconfs(nHeight,nDepth);
+            if ( dpowconfs < minDepth || dpowconfs > maxDepth) {
+                continue;
+            }
+        } else {
+            if ( wtx.GetDepthInMainChain() < minDepth ||
+                wtx.GetDepthInMainChain() > maxDepth) {
+                continue;
+            }
         }
 
         for (auto & pair : wtx.mapSproutNoteData) {

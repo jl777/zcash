@@ -84,6 +84,8 @@ UniValue z_getoperationstatus_IMPL(const UniValue&, bool);
 #define PLAN_NAME_MAX   8
 #define VALID_PLAN_NAME(x)  (strlen(x) <= PLAN_NAME_MAX)
 
+int tx_height( const uint256 &hash );
+
 std::string HelpRequiringPassphrase()
 {
     return pwalletMain && pwalletMain->IsCrypted()
@@ -933,9 +935,20 @@ UniValue getreceivedbyaddress(const UniValue& params, bool fHelp)
             continue;
 
         BOOST_FOREACH(const CTxOut& txout, wtx.vout)
-            if (txout.scriptPubKey == scriptPubKey)
-                if (wtx.GetDepthInMainChain() >= nMinDepth)
-                    nAmount += txout.nValue; // komodo_interest?
+            if (txout.scriptPubKey == scriptPubKey) {
+                int nDepth    = wtx.GetDepthInMainChain();
+                if( nMinDepth > 1 ) {
+                    int nHeight    = tx_height(wtx.GetHash());
+                    int dpowconfs  = komodo_dpowconfs(nHeight, nDepth);
+                    if (dpowconfs >= nMinDepth) {
+                        nAmount   += txout.nValue; // komodo_interest?
+                    }
+                } else {
+                    if (nDepth  >= nMinDepth) {
+                        nAmount += txout.nValue; // komodo_interest?
+                    }
+                }
+            }
     }
 
     return  ValueFromAmount(nAmount);
@@ -1013,8 +1026,18 @@ CAmount GetAccountBalance(CWalletDB& walletdb, const string& strAccount, int nMi
         CAmount nReceived, nSent, nFee;
         wtx.GetAccountAmounts(strAccount, nReceived, nSent, nFee, filter);
 
-        if (nReceived != 0 && wtx.GetDepthInMainChain() >= nMinDepth)
-            nBalance += nReceived;
+        int nDepth    = wtx.GetDepthInMainChain();
+        if( nMinDepth > 1 ) {
+            int nHeight    = tx_height(wtx.GetHash());
+            int dpowconfs  = komodo_dpowconfs(nHeight, nDepth);
+            if (nReceived != 0 && dpowconfs >= nMinDepth) {
+                nBalance += nReceived;
+            }
+        } else {
+            if (nReceived != 0 && wtx.GetDepthInMainChain() >= nMinDepth) {
+                nBalance += nReceived;
+            }
+        }
         nBalance -= nSent + nFee;
     }
 
@@ -1186,10 +1209,20 @@ UniValue getbalance(const UniValue& params, bool fHelp)
             list<COutputEntry> listReceived;
             list<COutputEntry> listSent;
             wtx.GetAmounts(listReceived, listSent, allFee, strSentAccount, filter);
-            if (wtx.GetDepthInMainChain() >= nMinDepth)
-            {
-                BOOST_FOREACH(const COutputEntry& r, listReceived)
-                    nBalance += r.amount;
+
+            int nDepth    = wtx.GetDepthInMainChain();
+            if( nMinDepth > 1 ) {
+                 int nHeight    = tx_height(wtx.GetHash());
+                 int dpowconfs  = komodo_dpowconfs(nHeight, nDepth);
+                 if (dpowconfs >= nMinDepth) {
+                    BOOST_FOREACH(const COutputEntry& r, listReceived)
+                        nBalance += r.amount;
+                 }
+             } else {
+                 if (nDepth >= nMinDepth) {
+                    BOOST_FOREACH(const COutputEntry& r, listReceived)
+                        nBalance += r.amount;
+                 }
             }
             BOOST_FOREACH(const COutputEntry& s, listSent)
                 nBalance -= s.amount;
@@ -1424,24 +1457,19 @@ UniValue sendmany(const UniValue& params, bool fHelp)
     if (params.size() > 4)
         subtractFeeFromAmount = params[4].get_array();
 
-    std::set<CTxDestination> destinations;
     std::vector<CRecipient> vecSend;
 
     CAmount totalAmount = 0;
     std::vector<std::string> keys = sendTo.getKeys();
+    int32_t i = 0;
     for (const std::string& name_ : keys) {
         CTxDestination dest = DecodeDestination(name_);
         if (!IsValidDestination(dest)) {
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Zcash address: ") + name_);
         }
 
-        /*if (destinations.count(dest)) {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, std::string("Invalid parameter, duplicated address: ") + name_);
-        }*/
-        destinations.insert(dest);
-
         CScript scriptPubKey = GetScriptForDestination(dest);
-        CAmount nAmount = AmountFromValue(sendTo[name_]);
+        CAmount nAmount = AmountFromValue(sendTo[i]);
         if (nAmount <= 0)
             throw JSONRPCError(RPC_TYPE_ERROR, "Invalid amount for send");
         totalAmount += nAmount;
@@ -1455,13 +1483,13 @@ UniValue sendmany(const UniValue& params, bool fHelp)
 
         CRecipient recipient = {scriptPubKey, nAmount, fSubtractFeeFromAmount};
         vecSend.push_back(recipient);
+        i++;
     }
 
     EnsureWalletIsUnlocked();
 
     // Check funds
-    CAmount nBalance = pwalletMain->GetBalance();
-    //CAmount nBalance = GetAccountBalance(strAccount, nMinDepth, ISMINE_SPENDABLE);
+    CAmount nBalance = GetAccountBalance(strAccount, nMinDepth, ISMINE_SPENDABLE);
     if (totalAmount > nBalance)
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, "Account has insufficient funds");
 
@@ -1572,9 +1600,16 @@ UniValue ListReceived(const UniValue& params, bool fByAccounts)
         if (wtx.IsCoinBase() || !CheckFinalTx(wtx))
             continue;
 
-        int nDepth = wtx.GetDepthInMainChain();
-        if (nDepth < nMinDepth)
-            continue;
+        int nDepth    = wtx.GetDepthInMainChain();
+        if( nMinDepth > 1 ) {
+            int nHeight   = tx_height(wtx.GetHash());
+            int dpowconfs = komodo_dpowconfs(nHeight, nDepth);
+            if (dpowconfs < nMinDepth)
+                continue;
+        } else {
+            if (nDepth < nMinDepth)
+                continue;
+        }
 
         BOOST_FOREACH(const CTxOut& txout, wtx.vout)
         {
@@ -2851,8 +2886,16 @@ UniValue listunspent(const UniValue& params, bool fHelp)
     LOCK2(cs_main, pwalletMain->cs_wallet);
     pwalletMain->AvailableCoins(vecOutputs, false, NULL, true);
     BOOST_FOREACH(const COutput& out, vecOutputs) {
-        if (out.nDepth < nMinDepth || out.nDepth > nMaxDepth)
-            continue;
+        int nDepth    = out.tx->GetDepthInMainChain();
+        if( nMinDepth > 1 ) {
+            int nHeight    = tx_height(out.tx->GetHash());
+            int dpowconfs  = komodo_dpowconfs(nHeight, nDepth);
+            if (dpowconfs < nMinDepth || dpowconfs > nMaxDepth)
+                continue;
+        } else {
+            if (out.nDepth < nMinDepth || out.nDepth > nMaxDepth)
+                continue;
+        }
 
         CTxDestination address;
         const CScript& scriptPubKey = out.tx->vout[out.i].scriptPubKey;
@@ -2984,7 +3027,7 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
             "\nExamples\n"
             + HelpExampleCli("z_listunspent", "")
             + HelpExampleCli("z_listunspent", "6 9999999 false \"[\\\"zs14d8tc0hl9q0vg5l28uec5vk6sk34fkj2n8s7jalvw5fxpy6v39yn4s2ga082lymrkjk0x2nqg37\\\",\\\"zs14d8tc0hl9q0vg5l28uec5vk6sk34fkj2n8s7jalvw5fxpy6v39yn4s2ga082lymrkjk0x2nqg37\\\"]\"")
-            + HelpExampleRpc("z_listunspent", "6 9999999 false \"[\\\"zs14d8tc0hl9q0vg5l28uec5vk6sk34fkj2n8s7jalvw5fxpy6v39yn4s2ga082lymrkjk0x2nqg37\\\",\\\"zs14d8tc0hl9q0vg5l28uec5vk6sk34fkj2n8s7jalvw5fxpy6v39yn4s2ga082lymrkjk0x2nqg37\\\"]\"")
+            + HelpExampleRpc("z_listunspent", "6,9999999,false,[\"zs14d8tc0hl9q0vg5l28uec5vk6sk34fkj2n8s7jalvw5fxpy6v39yn4s2ga082lymrkjk0x2nqg37\",\"zs14d8tc0hl9q0vg5l28uec5vk6sk34fkj2n8s7jalvw5fxpy6v39yn4s2ga082lymrkjk0x2nqg37\"]")
         );
 
     RPCTypeCheck(params, boost::assign::list_of(UniValue::VNUM)(UniValue::VNUM)(UniValue::VBOOL)(UniValue::VARR));
@@ -3068,28 +3111,17 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
 
         for (auto & entry : sproutEntries) {
             UniValue obj(UniValue::VOBJ);
-            int nHeight = 0;
-            CTransaction tx;
-            uint256 hashBlock;
+
+            int nHeight   = tx_height(entry.jsop.hash);
+            int dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
+            // Only return notarized results when minconf>1
+            if (nMinDepth > 1 && dpowconfs == 1)
+                continue;
 
             obj.push_back(Pair("txid", entry.jsop.hash.ToString()));
             obj.push_back(Pair("jsindex", (int)entry.jsop.js ));
             obj.push_back(Pair("jsoutindex", (int)entry.jsop.n));
-
-            if (!GetTransaction(entry.jsop.hash, tx, hashBlock, true)) {
-                // TODO: should we throw JSONRPCError ?
-                fprintf(stderr,"tx hash %s does not exist!\n", entry.jsop.hash.ToString().c_str() );
-            }
-
-            BlockMap::const_iterator it = mapBlockIndex.find(hashBlock);
-            if (it != mapBlockIndex.end()) {
-                nHeight = it->second->GetHeight();
-                //fprintf(stderr,"blockHash %s height %d\n",hashBlock.ToString().c_str(), nHeight);
-            } else {
-                // TODO: should we throw JSONRPCError ?
-                fprintf(stderr,"block hash %s does not exist!\n", hashBlock.ToString().c_str() );
-            }
-            obj.push_back(Pair("confirmations", komodo_dpowconfs(nHeight, entry.confirmations)));
+            obj.push_back(Pair("confirmations", dpowconfs));
             obj.push_back(Pair("rawconfirmations", entry.confirmations));
             bool hasSproutSpendingKey = pwalletMain->HaveSproutSpendingKey(boost::get<libzcash::SproutPaymentAddress>(entry.address));
             obj.push_back(Pair("spendable", hasSproutSpendingKey));
@@ -3105,25 +3137,17 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
 
         for (auto & entry : saplingEntries) {
             UniValue obj(UniValue::VOBJ);
+
+            int nHeight   = tx_height(entry.op.hash);
+            int dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
+
+            // Only return notarized results when minconf>1
+            if (nMinDepth > 1 && dpowconfs == 1)
+                continue;
+
             obj.push_back(Pair("txid", entry.op.hash.ToString()));
             obj.push_back(Pair("outindex", (int)entry.op.n));
-            int nHeight = 0;
-            CTransaction tx;
-            uint256 hashBlock;
-            if (!GetTransaction(entry.op.hash, tx, hashBlock, true)) {
-                // TODO: should we throw JSONRPCError ?
-                fprintf(stderr,"tx hash %s does not exist!\n", entry.op.hash.ToString().c_str() );
-            }
-
-            BlockMap::const_iterator it = mapBlockIndex.find(hashBlock);
-            if (it != mapBlockIndex.end()) {
-                nHeight = it->second->GetHeight();
-                //fprintf(stderr,"blockHash %s height %d\n",hashBlock.ToString().c_str(), nHeight);
-            } else {
-                // TODO: should we throw JSONRPCError ?
-                fprintf(stderr,"block hash %s does not exist!\n", hashBlock.ToString().c_str() );
-            }
-            obj.push_back(Pair("confirmations", komodo_dpowconfs(nHeight, entry.confirmations)));
+            obj.push_back(Pair("confirmations", dpowconfs));
             obj.push_back(Pair("rawconfirmations", entry.confirmations));
             libzcash::SaplingIncomingViewingKey ivk;
             libzcash::SaplingFullViewingKey fvk;
@@ -3143,7 +3167,6 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
 
     return results;
 }
-
 
 UniValue fundrawtransaction(const UniValue& params, bool fHelp)
 {
@@ -3795,8 +3818,17 @@ CAmount getBalanceTaddr(std::string transparentAddress, int minDepth=1, bool ign
     pwalletMain->AvailableCoins(vecOutputs, false, NULL, true);
 
     BOOST_FOREACH(const COutput& out, vecOutputs) {
-        if (out.nDepth < minDepth) {
-            continue;
+        int nDepth    = out.tx->GetDepthInMainChain();
+        if( minDepth > 1 ) {
+            int nHeight    = tx_height(out.tx->GetHash());
+            int dpowconfs  = komodo_dpowconfs(nHeight, nDepth);
+            if (dpowconfs < minDepth) {
+                continue;
+            }
+        } else {
+            if (out.nDepth < minDepth) {
+                continue;
+            }
         }
 
         if (ignoreUnspendable && !out.fSpendable) {
@@ -3901,21 +3933,11 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
     if (boost::get<libzcash::SproutPaymentAddress>(&zaddr) != nullptr) {
         for (CSproutNotePlaintextEntry & entry : sproutEntries) {
             UniValue obj(UniValue::VOBJ);
-            int nHeight = 0;
-            CTransaction tx;
-            uint256 hashBlock;
-
-            if (GetTransaction(entry.jsop.hash, tx, hashBlock, true)) {
-                BlockMap::const_iterator it = mapBlockIndex.find(hashBlock);
-                if (it != mapBlockIndex.end()) {
-                    nHeight = it->second->GetHeight();
-                    //fprintf(stderr,"blockHash %s height %d\n",hashBlock.ToString().c_str(), nHeight);
-                } else {
-                    fprintf(stderr,"block hash %s does not exist!\n", hashBlock.ToString().c_str() );
-                }
-            } else {
-                fprintf(stderr,"tx hash %s does not exist!\n", entry.jsop.hash.ToString().c_str() );
-            }
+            int nHeight   = tx_height(entry.jsop.hash);
+            int dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
+            // Only return notarized results when minconf>1
+            if (nMinDepth > 1 && dpowconfs == 1)
+                continue;
 
             obj.push_back(Pair("txid", entry.jsop.hash.ToString()));
             obj.push_back(Pair("amount", ValueFromAmount(CAmount(entry.plaintext.value()))));
@@ -3924,7 +3946,7 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
             obj.push_back(Pair("jsindex", entry.jsop.js));
             obj.push_back(Pair("jsoutindex", entry.jsop.n));
             obj.push_back(Pair("rawconfirmations", entry.confirmations));
-            obj.push_back(Pair("confirmations", komodo_dpowconfs(nHeight, entry.confirmations)));
+            obj.push_back(Pair("confirmations", dpowconfs));
             if (hasSpendingKey) {
                 obj.push_back(Pair("change", pwalletMain->IsNoteSproutChange(nullifierSet, entry.address, entry.jsop)));
             }
@@ -3933,27 +3955,19 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
     } else if (boost::get<libzcash::SaplingPaymentAddress>(&zaddr) != nullptr) {
         for (SaplingNoteEntry & entry : saplingEntries) {
             UniValue obj(UniValue::VOBJ);
-            int nHeight = 0;
-            CTransaction tx;
-            uint256 hashBlock;
 
-            if (GetTransaction(entry.op.hash, tx, hashBlock, true)) {
-                BlockMap::const_iterator it = mapBlockIndex.find(hashBlock);
-                if (it != mapBlockIndex.end()) {
-                    nHeight = it->second->GetHeight();
-                    //fprintf(stderr,"blockHash %s height %d\n",hashBlock.ToString().c_str(), nHeight);
-                } else {
-                    fprintf(stderr,"block hash %s does not exist!\n", hashBlock.ToString().c_str() );
-                }
-            } else {
-                fprintf(stderr,"tx hash %s does not exist!\n", entry.op.hash.ToString().c_str() );
-            }
+            int nHeight   = tx_height(entry.op.hash);
+            int dpowconfs = komodo_dpowconfs(nHeight, entry.confirmations);
+            // Only return notarized results when minconf>1
+            if (nMinDepth > 1 && dpowconfs == 1)
+                continue;
+
             obj.push_back(Pair("txid", entry.op.hash.ToString()));
             obj.push_back(Pair("amount", ValueFromAmount(CAmount(entry.note.value()))));
             obj.push_back(Pair("memo", HexStr(entry.memo)));
             obj.push_back(Pair("outindex", (int)entry.op.n));
             obj.push_back(Pair("rawconfirmations", entry.confirmations));
-            obj.push_back(Pair("confirmations", komodo_dpowconfs(nHeight, entry.confirmations)));
+            obj.push_back(Pair("confirmations", dpowconfs));
             if (hasSpendingKey) {
               obj.push_back(Pair("change", pwalletMain->IsNoteSaplingChange(nullifierSet, entry.address, entry.op)));
             }
@@ -5309,6 +5323,7 @@ int32_t verus_staked(CBlock *pBlock, CMutableTransaction &txNew, uint32_t &nBits
 #include "../cc/CCPrices.h"
 #include "../cc/CCHeir.h"
 #include "../cc/CCMarmara.h"
+#include "../cc/CCPayments.h"
 
 int32_t ensure_CCrequirements(uint8_t evalcode)
 {
@@ -5351,9 +5366,12 @@ UniValue CCaddress(struct CCcontract_info *cp,char *name,std::vector<unsigned ch
     result.push_back(Pair("result", "success"));
     sprintf(str,"%sCCAddress",name);
     result.push_back(Pair(str,cp->unspendableCCaddr));
-    result.push_back(Pair("CCbalance",ValueFromAmount(CCaddress_balance(cp->unspendableCCaddr))));
+    sprintf(str,"%sCCBalance",name);
+    result.push_back(Pair(str,ValueFromAmount(CCaddress_balance(cp->unspendableCCaddr))));
     sprintf(str,"%sNormalAddress",name);
     result.push_back(Pair(str,cp->normaladdr));
+    sprintf(str,"%sNormalBalance",name);
+    result.push_back(Pair(str,ValueFromAmount(CCaddress_balance(cp->normaladdr))));
     if (strcmp(name,"Gateways")==0) result.push_back(Pair("GatewaysPubkey","03ea9c062b9652d8eff34879b504eda0717895d27597aaeb60347d65eed96ccb40"));
     if ((strcmp(name,"Channels")==0 || strcmp(name,"Heir")==0) && pubkey.size() == 33)
     {
@@ -5375,25 +5393,22 @@ UniValue CCaddress(struct CCcontract_info *cp,char *name,std::vector<unsigned ch
             result.push_back(Pair(str,destaddr));
         }
     }
-    if ( Getscriptaddress(destaddr,(CScript() << Mypubkey() << OP_CHECKSIG)) != 0 )
-        result.push_back(Pair("myAddress",destaddr));
-    if ( GetCCaddress(cp,destaddr,pubkey2pk(Mypubkey())) != 0 )
-    {
-        sprintf(str,"myCCAddress(%s)",name);
-        result.push_back(Pair(str,destaddr));
-    }    
     if ( pubkey.size() == 33 )
     {
         if ( GetCCaddress(cp,destaddr,pubkey2pk(pubkey)) != 0 )
         {
             sprintf(str,"PubkeyCCaddress(%s)",name);
             result.push_back(Pair(str,destaddr));
+            sprintf(str,"PubkeyCCbalance(%s)",name);
+            result.push_back(Pair(str,ValueFromAmount(CCaddress_balance(destaddr))));
         }
     }
     if ( GetCCaddress(cp,destaddr,pubkey2pk(Mypubkey())) != 0 )
     {
-        result.push_back(Pair("myCCaddress",destaddr));
-        result.push_back(Pair("myCCbalance",ValueFromAmount(CCaddress_balance(destaddr))));
+        sprintf(str,"myCCAddress(%s)",name);
+        result.push_back(Pair(str,destaddr));
+        sprintf(str,"myCCbalance(%s)",name);
+        result.push_back(Pair(str,ValueFromAmount(CCaddress_balance(destaddr))));
     }
     if ( Getscriptaddress(destaddr,(CScript() << Mypubkey() << OP_CHECKSIG)) != 0 )
     {
@@ -5557,6 +5572,84 @@ UniValue cclib(const UniValue& params, bool fHelp)
     }
     cp = CCinit(&C,evalcode);
     return(CClib(cp,method,jsonstr));
+}
+
+UniValue payments_release(const UniValue& params, bool fHelp)
+{
+    struct CCcontract_info *cp,C;
+    if ( fHelp || params.size() != 1 )
+        throw runtime_error("paymentsrelease \"[%22createtxid%22,amount]\"\n");
+    if ( ensure_CCrequirements(EVAL_PAYMENTS) < 0 )
+        throw runtime_error("to use CC contracts, you need to launch daemon with valid -pubkey= for an address in your wallet\n");
+    const CKeyStore& keystore = *pwalletMain;
+    LOCK2(cs_main, pwalletMain->cs_wallet);
+    cp = CCinit(&C,EVAL_PAYMENTS);
+    return(PaymentsRelease(cp,(char *)params[0].get_str().c_str()));
+}
+
+UniValue payments_fund(const UniValue& params, bool fHelp)
+{
+    struct CCcontract_info *cp,C;
+    if ( fHelp || params.size() != 1 )
+        throw runtime_error("paymentsfund \"[%22createtxid%22,amount(,useopret)]\"\n");
+    if ( ensure_CCrequirements(EVAL_PAYMENTS) < 0 )
+        throw runtime_error("to use CC contracts, you need to launch daemon with valid -pubkey= for an address in your wallet\n");
+    const CKeyStore& keystore = *pwalletMain;
+    LOCK2(cs_main, pwalletMain->cs_wallet);
+    cp = CCinit(&C,EVAL_PAYMENTS);
+    return(PaymentsFund(cp,(char *)params[0].get_str().c_str()));
+}
+
+UniValue payments_txidopret(const UniValue& params, bool fHelp)
+{
+    struct CCcontract_info *cp,C;
+    if ( fHelp || params.size() != 1 )
+        throw runtime_error("paymentstxidopret \"[allocation,%22scriptPubKey%22(,%22destopret%22)]\"\n");
+    if ( ensure_CCrequirements(EVAL_PAYMENTS) < 0 )
+        throw runtime_error("to use CC contracts, you need to launch daemon with valid -pubkey= for an address in your wallet\n");
+    const CKeyStore& keystore = *pwalletMain;
+    LOCK2(cs_main, pwalletMain->cs_wallet);
+    cp = CCinit(&C,EVAL_PAYMENTS);
+    return(PaymentsTxidopret(cp,(char *)params[0].get_str().c_str()));
+}
+
+UniValue payments_create(const UniValue& params, bool fHelp)
+{
+    struct CCcontract_info *cp,C;
+    if ( fHelp || params.size() != 1 )
+        throw runtime_error("paymentscreate \"[lockedblocks,minamount,%22paytxid0%22,...,%22paytxidN%22]\"\n");
+    if ( ensure_CCrequirements(EVAL_PAYMENTS) < 0 )
+        throw runtime_error("to use CC contracts, you need to launch daemon with valid -pubkey= for an address in your wallet\n");
+    const CKeyStore& keystore = *pwalletMain;
+    LOCK2(cs_main, pwalletMain->cs_wallet);
+    cp = CCinit(&C,EVAL_PAYMENTS);
+    return(PaymentsCreate(cp,(char *)params[0].get_str().c_str()));
+}
+
+UniValue payments_info(const UniValue& params, bool fHelp)
+{
+    struct CCcontract_info *cp,C;
+    if ( fHelp || params.size() != 1 )
+        throw runtime_error("paymentsinfo \"[%22createtxid%22]\"\n");
+    if ( ensure_CCrequirements(EVAL_PAYMENTS) < 0 )
+        throw runtime_error("to use CC contracts, you need to launch daemon with valid -pubkey= for an address in your wallet\n");
+    const CKeyStore& keystore = *pwalletMain;
+    LOCK2(cs_main, pwalletMain->cs_wallet);
+    cp = CCinit(&C,EVAL_PAYMENTS);
+    return(PaymentsInfo(cp,(char *)params[0].get_str().c_str()));
+}
+
+UniValue payments_list(const UniValue& params, bool fHelp)
+{
+    struct CCcontract_info *cp,C;
+    if ( fHelp || params.size() != 0 )
+        throw runtime_error("paymentslist\n");
+    if ( ensure_CCrequirements(EVAL_PAYMENTS) < 0 )
+        throw runtime_error("to use CC contracts, you need to launch daemon with valid -pubkey= for an address in your wallet\n");
+    const CKeyStore& keystore = *pwalletMain;
+    LOCK2(cs_main, pwalletMain->cs_wallet);
+    cp = CCinit(&C,EVAL_PAYMENTS);
+    return(PaymentsList(cp,(char *)""));
 }
 
 UniValue oraclesaddress(const UniValue& params, bool fHelp)
@@ -5955,7 +6048,7 @@ UniValue channelslist(const UniValue& params, bool fHelp)
 {
     if ( fHelp || params.size() > 0 )
         throw runtime_error("channelsinfo\n");
-    if ( ensure_CCrequirements(EVAL_MARMARA) < 0 )
+    if ( ensure_CCrequirements(EVAL_CHANNELS) < 0 )
         throw runtime_error("to use CC contracts, you need to launch daemon with valid -pubkey= for an address in your wallet\n");
     const CKeyStore& keystore = *pwalletMain;
     LOCK2(cs_main, pwalletMain->cs_wallet);
@@ -6816,143 +6909,14 @@ UniValue priceslist(const UniValue& params, bool fHelp)
 
 UniValue pricesinfo(const UniValue& params, bool fHelp)
 {
-    uint256 fundingtxid;
-    if ( fHelp || params.size() != 1 )
+    uint256 bettxid; int32_t height;
+    if ( fHelp || params.size() != 2 )
         throw runtime_error("pricesinfo fundingtxid\n");
     if ( ensure_CCrequirements(EVAL_PRICES) < 0 )
         throw runtime_error("to use CC contracts, you need to launch daemon with valid -pubkey= for an address in your wallet\n");
-    fundingtxid = Parseuint256((char *)params[0].get_str().c_str());
-    return(PricesInfo(fundingtxid));
-}
-
-UniValue pricescreate(const UniValue& params, bool fHelp)
-{
-    UniValue result(UniValue::VOBJ); uint64_t mode; int64_t funding; int32_t i,n,margin,maxleverage; std::string hex; uint256 oracletxid,longtoken,shorttoken,bettoken; std::vector<CPubKey> pubkeys; std::vector<uint8_t>pubkey;
-    if ( fHelp || params.size() < 8 )
-        throw runtime_error("pricescreate bettoken oracletxid margin mode longtoken shorttoken maxleverage funding N [pubkeys]\n");
-    if ( ensure_CCrequirements(EVAL_PRICES) < 0 )
-        throw runtime_error("to use CC contracts, you need to launch daemon with valid -pubkey= for an address in your wallet\n");
-    const CKeyStore& keystore = *pwalletMain;
-    LOCK2(cs_main, pwalletMain->cs_wallet);
-    bettoken = Parseuint256((char *)params[0].get_str().c_str());
-    oracletxid = Parseuint256((char *)params[1].get_str().c_str());
-    margin = atof(params[2].get_str().c_str()) * 1000;
-    mode = atol(params[3].get_str().c_str());
-    longtoken = Parseuint256((char *)params[4].get_str().c_str());
-    shorttoken = Parseuint256((char *)params[5].get_str().c_str());
-    maxleverage = atol(params[6].get_str().c_str());
-    funding = atof(params[7].get_str().c_str()) * COIN + 0.00000000499999;
-    n = atoi(params[8].get_str().c_str());
-    if ( n > 0 )
-    {
-        for (i=0; i<n; i++)
-        {
-            if ( params.size() < 9+i+1 )
-                throw runtime_error("not enough parameters for N pubkeys\n");
-            pubkey = ParseHex(params[9+i].get_str().c_str());
-            pubkeys.push_back(pubkey2pk(pubkey));
-        }
-    }
-    hex = PricesCreateFunding(0,bettoken,oracletxid,margin,mode,longtoken,shorttoken,maxleverage,funding,pubkeys);
-    if ( hex.size() > 0 )
-    {
-        result.push_back(Pair("result", "success"));
-        result.push_back(Pair("hex", hex));
-    }
-    else
-    {
-        ERR_RESULT("couldnt create prices funding transaction");
-    }
-    return(result);
-}
-
-UniValue pricesaddfunding(const UniValue& params, bool fHelp)
-{
-    UniValue result(UniValue::VOBJ); std::string hex; uint256 fundingtxid,bettoken; int64_t amount;
-    if ( fHelp || params.size() != 3 )
-        throw runtime_error("pricesaddfunding fundingtxid bettoken amount\n");
-    if ( ensure_CCrequirements(EVAL_PRICES) < 0 )
-        throw runtime_error("to use CC contracts, you need to launch daemon with valid -pubkey= for an address in your wallet\n");
-    const CKeyStore& keystore = *pwalletMain;
-    LOCK2(cs_main, pwalletMain->cs_wallet);
-    fundingtxid = Parseuint256((char *)params[0].get_str().c_str());
-    bettoken = Parseuint256((char *)params[1].get_str().c_str());
-    amount = atof(params[2].get_str().c_str()) * COIN + 0.00000000499999;
-    hex = PricesAddFunding(0,bettoken,fundingtxid,amount);
-    if ( hex.size() > 0 )
-    {
-        result.push_back(Pair("result", "success"));
-        result.push_back(Pair("hex", hex));
-    }
-    else
-    {
-        ERR_RESULT("couldnt create pricesaddfunding transaction");
-    }
-    return(result);
-}
-
-UniValue pricesbet(const UniValue& params, bool fHelp)
-{
-    UniValue result(UniValue::VOBJ); std::string hex; uint256 fundingtxid,bettoken; int64_t amount; int32_t leverage;
-    if ( fHelp || params.size() != 4 )
-        throw runtime_error("pricesbet fundingtxid bettoken amount leverage\n");
-    if ( ensure_CCrequirements(EVAL_PRICES) < 0 )
-        throw runtime_error("to use CC contracts, you need to launch daemon with valid -pubkey= for an address in your wallet\n");
-    const CKeyStore& keystore = *pwalletMain;
-    LOCK2(cs_main, pwalletMain->cs_wallet);
-    fundingtxid = Parseuint256((char *)params[0].get_str().c_str());
-    bettoken = Parseuint256((char *)params[1].get_str().c_str());
-    amount = atof(params[2].get_str().c_str()) * COIN + 0.00000000499999;
-    leverage = atoi(params[3].get_str().c_str());
-    hex = PricesBet(0,bettoken,fundingtxid,amount,leverage);
-    if ( hex.size() > 0 )
-    {
-        result.push_back(Pair("result", "success"));
-        result.push_back(Pair("hex", hex));
-    }
-    else
-    {
-        ERR_RESULT("couldnt create pricesbet transaction");
-    }
-    return(result);
-}
-
-UniValue pricesstatus(const UniValue& params, bool fHelp)
-{
-    uint256 fundingtxid,bettxid,bettoken;
-    if ( fHelp || params.size() != 3 )
-        throw runtime_error("pricesstatus fundingtxid bettoken bettxid\n");
-    if ( ensure_CCrequirements(EVAL_PRICES) < 0 )
-        throw runtime_error("to use CC contracts, you need to launch daemon with valid -pubkey= for an address in your wallet\n");
-    fundingtxid = Parseuint256((char *)params[0].get_str().c_str());
-    bettoken = Parseuint256((char *)params[1].get_str().c_str());
-    bettxid = Parseuint256((char *)params[2].get_str().c_str());
-    return(PricesStatus(0,bettoken,fundingtxid,bettxid));
-}
-
-UniValue pricesfinish(const UniValue& params, bool fHelp)
-{
-    UniValue result(UniValue::VOBJ); uint256 fundingtxid,bettxid,bettoken; std::string hex;
-    if ( fHelp || params.size() != 3 )
-        throw runtime_error("pricesfinish fundingtxid bettoken bettxid\n");
-    if ( ensure_CCrequirements(EVAL_PRICES) < 0 )
-        throw runtime_error("to use CC contracts, you need to launch daemon with valid -pubkey= for an address in your wallet\n");
-    const CKeyStore& keystore = *pwalletMain;
-    LOCK2(cs_main, pwalletMain->cs_wallet);
-    fundingtxid = Parseuint256((char *)params[0].get_str().c_str());
-    bettoken = Parseuint256((char *)params[1].get_str().c_str());
-    bettxid = Parseuint256((char *)params[2].get_str().c_str());
-    hex = PricesFinish(0,bettoken,fundingtxid,bettxid);
-    if ( hex.size() > 0 )
-    {
-        result.push_back(Pair("result", "success"));
-        result.push_back(Pair("hex", hex));
-    }
-    else
-    {
-        ERR_RESULT("couldnt create pricesfinish transaction");
-    }
-    return(result);
+    bettxid = Parseuint256((char *)params[0].get_str().c_str());
+    height = atoi(params[1].get_str().c_str());
+    return(PricesInfo(bettxid,height));
 }
 
 UniValue dicefund(const UniValue& params, bool fHelp)
@@ -8024,8 +7988,6 @@ UniValue test_heirmarker(const UniValue& params, bool fHelp)
 
 	cp = CCinit(&C, EVAL_HEIR);
 	return(FinalizeCCTx(0, cp, mtx, myPubkey, 10000, opret));
-
-
 }
 
 

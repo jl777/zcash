@@ -13,6 +13,7 @@
 #include <signal.h>
 //#include <unistd.h>
 //#include <curses.h>
+
 #include "rogue.h"
 #ifdef STANDALONE
 #include "../komodo/src/komodo_cJSON.h"
@@ -157,7 +158,7 @@ int32_t flushkeystrokes_local(struct rogue_state *rs,int32_t waitflag)
 #ifdef BUILD_ROGUE
 // stubs for inside daemon
 
-void rogue_progress(struct rogue_state *rs,int32_t waitflag,uint64_t seed,char *keystrokes,int32_t num)
+int32_t rogue_progress(struct rogue_state *rs,int32_t waitflag,uint64_t seed,char *keystrokes,int32_t num)
 {
 }
 
@@ -171,15 +172,11 @@ int32_t flushkeystrokes(struct rogue_state *rs,int32_t waitflag)
 {
     if ( rs->num > 0 )
     {
-        // need to get existing keystrokes including mempool
-        // create keystrokes that are not saved
-        //rs->keytxid = rogue_progress(rs,waitflag,rs->seed,&rs->buffered[rs->lastnum],rs->num - rs->lastnum);
-        //rs->lastnum = rs->num;
-        rogue_progress(rs,waitflag,rs->seed,rs->buffered,rs->num);
-        flushkeystrokes_local(rs,waitflag);
-        memset(rs->buffered,0,sizeof(rs->buffered));
-        //rs->num = 0;
-        //rs->counter++;
+        if ( rogue_progress(rs,waitflag,rs->seed,rs->buffered,rs->num) > 0 )
+        {
+            flushkeystrokes_local(rs,waitflag);
+            memset(rs->buffered,0,sizeof(rs->buffered));
+        }
     }
     return(0);
 }
@@ -195,6 +192,12 @@ void rogue_bailout(struct rogue_state *rs)
     if ( system(cmd) != 0 )
         fprintf(stderr,"error issuing (%s)\n",cmd);*/
 }
+
+#ifdef _WIN32
+#ifdef _MSC_VER
+#define sleep(x) Sleep(1000*(x))
+#endif
+#endif
 
 int32_t rogue_replay2(uint8_t *newdata,uint64_t seed,char *keystrokes,int32_t num,struct rogue_player *player,int32_t sleepmillis)
 {
@@ -215,6 +218,14 @@ int32_t rogue_replay2(uint8_t *newdata,uint64_t seed,char *keystrokes,int32_t nu
     globalR = *rs;
     uint32_t starttime = (uint32_t)time(NULL);
     rogueiterate(rs);
+
+	/*
+	// keypress after replay
+	printf("[Press return to continue]");
+	fflush(stdout);
+	if (fgets(prbuf, 10, stdin) != 0);
+	*/
+	
     if ( 0 )
     {
         fprintf(stderr,"elapsed %d seconds\n",(uint32_t)time(NULL) - starttime);
@@ -267,7 +278,7 @@ char *rogue_keystrokesload(int32_t *numkeysp,uint64_t seed,int32_t counter)
         if ( (fsize= get_filesize(fp)) <= 0 )
         {
             fclose(fp);
-            printf("fsize.%ld\n",fsize);
+            //printf("fsize.%ld\n",fsize);
             break;
         }
         if ( (keystrokes= (char *)realloc(keystrokes,num+fsize)) == 0 )
@@ -286,7 +297,7 @@ char *rogue_keystrokesload(int32_t *numkeysp,uint64_t seed,int32_t counter)
         fclose(fp);
         num += fsize;
         counter++;
-        fprintf(stderr,"loaded %ld from (%s) total %d\n",fsize,fname,num);
+        //fprintf(stderr,"loaded %ld from (%s) total %d\n",fsize,fname,num);
     }
     *numkeysp = num;
     return(keystrokes);
@@ -328,7 +339,15 @@ int rogue(int argc, char **argv, char **envp)
     rs->sleeptime = 1; // non-zero to allow refresh()
     if ( argc == 3 && strlen(argv[2]) == 64 )
     {
-        rs->seed = atol(argv[1]);
+		#ifdef _WIN32
+		#ifdef _MSC_VER
+		rs->seed = _strtoui64(argv[1], NULL, 10);
+		#else
+		rs->seed = atol(argv[1]); // windows, but not MSVC
+		#endif // _MSC_VER
+		#else
+		rs->seed = atol(argv[1]); // non-windows
+		#endif // _WIN32
         strcpy(Gametxidstr,argv[2]);
         fprintf(stderr,"setplayerdata\n");
         if ( rogue_setplayerdata(rs,Gametxidstr) < 0 )
@@ -525,6 +544,18 @@ tstp(int ignored)
 #endif
 #endif*/
 }
+
+
+#ifdef _WIN32
+#ifdef _MSC_VER
+void usleep(int32_t micros)
+{
+	if (micros < 1000)
+		Sleep(1);
+	else Sleep(micros / 1000);
+}
+#endif
+#endif
 
 /*
  * playit:
