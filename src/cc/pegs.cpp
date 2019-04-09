@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright © 2014-2018 The SuperNET Developers.                             *
+ * Copyright © 2014-2019 The SuperNET Developers.                             *
  *                                                                            *
  * See the AUTHORS, DEVELOPER-AGREEMENT and LICENSE files at                  *
  * the top-level directory of this distribution for the individual copyright  *
@@ -16,15 +16,7 @@
 #include "CCPegs.h"
 
 /*
- Pegs CC builds on top of Prices CC and would bind a pricefeed to a token bid/ask automated marketmaking. 
- 
- Funds deposited into CC address for a specific peg would then be used to fund the bid/ask as the pricefeed changes the price. Profits/losses would accumulate in the associated address.
- 
- In the event funds exceed a specified level, it can be spent into a collection address. The idea is that the collection address can further be used for revshares.
- 
- int64_t OraclePrice(int32_t height,uint256 reforacletxid,char *markeraddr,char *format);
 
- OraclePrice is very useful for pegs. 
  
 */
 
@@ -82,7 +74,7 @@ bool PegsExactAmounts(struct CCcontract_info *cp,Eval* eval,const CTransaction &
 bool PegsValidate(struct CCcontract_info *cp,Eval* eval,const CTransaction &tx, uint32_t nIn)
 {
     int32_t numvins,numvouts,preventCCvins,preventCCvouts,i,numblocks; bool retval; uint256 txid; uint8_t hash[32]; char str[65],destaddr[64];
-    return(false);
+    return eval->Invalid("no validation yet");
     std::vector<std::pair<CAddressIndexKey, CAmount> > txids;
     numvins = tx.vin.size();
     numvouts = tx.vout.size();
@@ -134,7 +126,7 @@ int64_t AddPegsInputs(struct CCcontract_info *cp,CMutableTransaction &mtx,CPubKe
         // no need to prevent dup
         if ( GetTransaction(txid,vintx,hashBlock,false) != 0 )
         {
-            if ( (nValue= IsPegsvout(cp,vintx,vout)) > 1000000 && myIsutxo_spentinmempool(txid,vout) == 0 )
+            if ( (nValue= IsPegsvout(cp,vintx,vout)) > 1000000 && myIsutxo_spentinmempool(ignoretxid,ignorevin,txid,vout) == 0 )
             {
                 if ( total != 0 && maxinputs != 0 )
                     mtx.vin.push_back(CTxIn(txid,vout,CScript()));
