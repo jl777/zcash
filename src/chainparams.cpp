@@ -152,7 +152,8 @@ public:
         BOOST_STATIC_ASSERT(equihash_parameters_acceptable(N, K));
         nEquihashN = N;
         nEquihashK = K;
-
+        // nEquihashN = N2;
+        // nEquihashK = K2;
         const char* pszTimestamp = "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks";
         CMutableTransaction txNew;
         txNew.vin.resize(1);
