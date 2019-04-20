@@ -5438,7 +5438,7 @@ UniValue setpubkey(const UniValue& params, bool fHelp)
                 "  {\n"
                 "    \"pubkey\" : \"pubkey\",     (string) The pubkey\n"
                 "    \"ismine\" : \"true/false\",     (bool)\n"
-                "    \"address\" : \"R address\",     (string) The pubkey\n"
+                "    \"address\" : \"R address\",     (string) The transparent address\n"
                 "  }\n"
                 "\nExamples:\n"
                 + HelpExampleCli("setpubkey", "02f7597468703c1c5c8465dd6d43acaae697df9df30bed21494d193412a1ea193e")
@@ -5462,10 +5462,10 @@ UniValue setpubkey(const UniValue& params, bool fHelp)
                 CTxDestination dest = address.Get();
                 isminetype mine = pwalletMain ? IsMine(*pwalletMain, dest) : ISMINE_NO;
                 if ( mine == ISMINE_NO )
-                    result.push_back(Pair("ismine", "false"));
+                    result.push_back(Pair("ismine", false));
                 else
                 {
-                    result.push_back(Pair("ismine", "true"));
+                    result.push_back(Pair("ismine", true));
                     std::string notaryname;
                     if ( (IS_STAKED_NOTARY= StakedNotaryID(notaryname, Raddress)) > -1 )
                     {
@@ -5480,10 +5480,8 @@ UniValue setpubkey(const UniValue& params, bool fHelp)
             }
             else
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Pubkey is invalid");
-//                result.push_back(Pair("error", "pubkey entered is invalid."));
         }
         else
-//            result.push_back(Pair("error", "pubkey is wrong length, must be 66 char hex string."));
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Pubkey has wrong length, must be 66 char hex string.");
     }
     else
@@ -5494,7 +5492,6 @@ UniValue setpubkey(const UniValue& params, bool fHelp)
             NOTARY_ADDRESS.assign(Raddress);
         }
         throw JSONRPCError(RPC_WALLET_ERROR, "Can only set pubkey once. To change it you need to restart the daemon.");
-//        result.push_back(Pair("error", "Can only set pubkey once, to change it you need to restart your daemon."));
     }
     if ( NOTARY_PUBKEY33[0] != 0 && !NOTARY_ADDRESS.empty() )
     {
