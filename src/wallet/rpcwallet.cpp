@@ -5430,28 +5430,28 @@ UniValue setpubkey(const UniValue& params, bool fHelp)
     UniValue result(UniValue::VOBJ);
     if ( fHelp || params.size() > 1 )
         throw runtime_error(
-        "setpubkey\n"
-        "\nSets the -pubkey if the daemon was not started with it, if it was already set, it returns the pubkey, and its Raddress.\n"
-        "\nArguments:\n"
-        "1. \"pubkey\"         (string) pubkey to set.\n"
-        "\nResult:\n"
-        "  {\n"
-        "    \"pubkey\" : \"pubkey\",     (string) The pubkey\n"
-        "    \"ismine\" : \"true/false\",     (bool)\n"
-        "    \"R-address\" : \"R address\",     (string) The pubkey\n"
-        "  }\n"
-        "\nExamples:\n"
-        + HelpExampleCli("setpubkey", "02f7597468703c1c5c8465dd6d43acaae697df9df30bed21494d193412a1ea193e")
-        + HelpExampleRpc("setpubkey", "02f7597468703c1c5c8465dd6d43acaae697df9df30bed21494d193412a1ea193e")
-      );
+                "setpubkey\n"
+                "\nSets the -pubkey if the daemon was not started with it. If it was already set, it returns the pubkey, and its Raddress.\n"
+                "\nArguments:\n"
+                "1. \"pubkey\"         (string) pubkey to set.\n"
+                "\nResult:\n"
+                "  {\n"
+                "    \"pubkey\" : \"pubkey\",     (string) The pubkey\n"
+                "    \"ismine\" : \"true/false\",     (bool)\n"
+                "    \"address\" : \"R address\",     (string) The pubkey\n"
+                "  }\n"
+                "\nExamples:\n"
+                + HelpExampleCli("setpubkey", "02f7597468703c1c5c8465dd6d43acaae697df9df30bed21494d193412a1ea193e")
+                + HelpExampleRpc("setpubkey", "02f7597468703c1c5c8465dd6d43acaae697df9df30bed21494d193412a1ea193e")
+        );
 
     LOCK2(cs_main, pwalletMain ? &pwalletMain->cs_wallet : NULL);
 
     char Raddress[64];
     uint8_t pubkey33[33];
-    if ( NOTARY_PUBKEY33[0] == 0 ) 
+    if ( NOTARY_PUBKEY33[0] == 0 )
     {
-        if (strlen(params[0].get_str().c_str()) == 66) 
+        if (strlen(params[0].get_str().c_str()) == 66)
         {
             decode_hex(pubkey33,33,(char *)params[0].get_str().c_str());
             pubkey2addr((char *)Raddress,(uint8_t *)pubkey33);
@@ -5461,15 +5461,15 @@ UniValue setpubkey(const UniValue& params, bool fHelp)
             {
                 CTxDestination dest = address.Get();
                 isminetype mine = pwalletMain ? IsMine(*pwalletMain, dest) : ISMINE_NO;
-                if ( mine == ISMINE_NO ) 
-                    result.push_back(Pair("WARNING", "privkey for this pubkey is not imported to wallet!"));
-                else 
+                if ( mine == ISMINE_NO )
+                    result.push_back(Pair("ismine", "false"));
+                else
                 {
                     result.push_back(Pair("ismine", "true"));
                     std::string notaryname;
-                    if ( (IS_STAKED_NOTARY= StakedNotaryID(notaryname, Raddress)) > -1 ) 
+                    if ( (IS_STAKED_NOTARY= StakedNotaryID(notaryname, Raddress)) > -1 )
                     {
-                        result.push_back(Pair("IsNotary", notaryname));
+                        result.push_back(Pair("isnotary", notaryname));
                         IS_KOMODO_NOTARY = 0;
                     }
                 }
@@ -5479,21 +5479,24 @@ UniValue setpubkey(const UniValue& params, bool fHelp)
                 NOTARY_ADDRESS = address.ToString();
             }
             else
-                result.push_back(Pair("error", "pubkey entered is invalid."));
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Pubkey is invalid");
+//                result.push_back(Pair("error", "pubkey entered is invalid."));
         }
         else
-            result.push_back(Pair("error", "pubkey is wrong length, must be 66 char hex string."));
+//            result.push_back(Pair("error", "pubkey is wrong length, must be 66 char hex string."));
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Pubkey has wrong length, must be 66 char hex string.");
     }
-    else 
+    else
     {
-        if ( NOTARY_ADDRESS.empty() ) 
+        if ( NOTARY_ADDRESS.empty() )
         {
-          pubkey2addr((char *)Raddress,(uint8_t *)NOTARY_PUBKEY33);
-          NOTARY_ADDRESS.assign(Raddress);
+            pubkey2addr((char *)Raddress,(uint8_t *)NOTARY_PUBKEY33);
+            NOTARY_ADDRESS.assign(Raddress);
         }
-        result.push_back(Pair("error", "Can only set pubkey once, to change it you need to restart your daemon."));
+        throw JSONRPCError(RPC_WALLET_ERROR, "Can only set pubkey once. To change it you need to restart the daemon.");
+//        result.push_back(Pair("error", "Can only set pubkey once, to change it you need to restart your daemon."));
     }
-    if ( NOTARY_PUBKEY33[0] != 0 && !NOTARY_ADDRESS.empty() ) 
+    if ( NOTARY_PUBKEY33[0] != 0 && !NOTARY_ADDRESS.empty() )
     {
         result.push_back(Pair("address", NOTARY_ADDRESS));
         result.push_back(Pair("pubkey", NOTARY_PUBKEY));
