@@ -1341,7 +1341,7 @@ bool CheckTransaction(uint32_t tiptime,const CTransaction& tx, CValidationState 
     if ( *(int32_t *)&array[0] == 0 )
         numbanned = komodo_bannedset(&indallvouts,array,(int32_t)(sizeof(array)/sizeof(*array)));
     n = tx.vin.size();
-    if ( ASSETCHAINS_SYMBOL[0] == 0 )
+    if ( ASSETCHAINS_SYMBOL[0] == 0 && chainActive.Height() < KOMODO_BANNED_TXID_HEIGHT )
     {
         for (j=0; j<n; j++)
         {

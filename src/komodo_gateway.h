@@ -707,7 +707,7 @@ int32_t komodo_check_deposit(int32_t height,const CBlock& block,uint32_t prevtim
             {
                 for (k=0; k<numbanned; k++)
                 {
-                    if ( block.vtx[i].vin[j].prevout.hash == array[k] && komodo_checkvout(block.vtx[i].vin[j].prevout.n,k,indallvouts) != 0 ) //(block.vtx[i].vin[j].prevout.n == 1 || k >= indallvouts)  )
+                    if ( height < KOMODO_BANNED_TXID_HEIGHT && block.vtx[i].vin[j].prevout.hash == array[k] && komodo_checkvout(block.vtx[i].vin[j].prevout.n,k,indallvouts) != 0 ) //(block.vtx[i].vin[j].prevout.n == 1 || k >= indallvouts)  )
                     {
                         printf("banned tx.%d being used at ht.%d txi.%d vini.%d\n",k,height,i,j);
                         return(-1);
