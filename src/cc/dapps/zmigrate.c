@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright © 2014-2018 The SuperNET Developers.                             *
+ * Copyright © 2014-2019 The SuperNET Developers.                             *
  *                                                                            *
  * See the AUTHORS, DEVELOPER-AGREEMENT and LICENSE files at                  *
  * the top-level directory of this distribution for the individual copyright  *
@@ -20,18 +20,18 @@
 #include "cJSON.c"
 
 /*
-z_migrate: the purpose of z_migrate is to make converting of all sprout outputs into sapling. the usage would be for the user to specify a sapling address and call z_migrate zsaddr, until it returns that there is nothing left to be done.
-
-its main functionality is quite similar to a z_mergetoaddress ANY_ZADDR -> onetime_taddr followed by a z_sendmany onetime_taddr -> zsaddr
-
-since the z_mergetoaddress will take time, it would just queue up an async operation. When it starts, it should see if there are any onetime_taddr with 10000.0001 funds in it, that is a signal for it to do the sapling tx and it can just do that without async as it is fast enough, especially with a taddr input. Maybe it limits itself to one,  or it does all possible taddr -> sapling as fast as it can. either is fine as it will be called over and over anyway.
-
-It might be that there is nothing to do, but some operations are pending. in that case it would return such a status. as soon as the operation finishes, there would be more work to do.
-
-the amount sent to the taddr, should be 10000.0001
-
-The GUI or user would be expected to generate a sapling address and then call z_migrate saplingaddr in a loop, until it returns that it is all done. this loop should pause for 10 seconds or so, if z_migrate is just waiting for opid to complete.
-*/
+ z_migrate: the purpose of z_migrate is to make converting of all sprout outputs into sapling. the usage would be for the user to specify a sapling address and call z_migrate zsaddr, until it returns that there is nothing left to be done.
+ 
+ its main functionality is quite similar to a z_mergetoaddress ANY_ZADDR -> onetime_taddr followed by a z_sendmany onetime_taddr -> zsaddr
+ 
+ since the z_mergetoaddress will take time, it would just queue up an async operation. When it starts, it should see if there are any onetime_taddr with 10000.0001 funds in it, that is a signal for it to do the sapling tx and it can just do that without async as it is fast enough, especially with a taddr input. Maybe it limits itself to one,  or it does all possible taddr -> sapling as fast as it can. either is fine as it will be called over and over anyway.
+ 
+ It might be that there is nothing to do, but some operations are pending. in that case it would return such a status. as soon as the operation finishes, there would be more work to do.
+ 
+ the amount sent to the taddr, should be 10000.0001
+ 
+ The GUI or user would be expected to generate a sapling address and then call z_migrate saplingaddr in a loop, until it returns that it is all done. this loop should pause for 10 seconds or so, if z_migrate is just waiting for opid to complete.
+ */
 
 bits256 zeroid;
 
@@ -315,6 +315,8 @@ cJSON *get_komodocli(char *refcoin,char **retstrp,char *acname,char *method,char
 {
     long fsize; cJSON *retjson = 0; char cmdstr[32768],*jsonstr,fname[256];
     sprintf(fname,"/tmp/zmigrate.%s",method);
+    //if ( (acname == 0 || acname[0] == 0) && strcmp(refcoin,"KMD") != 0 )
+    //    acname = refcoin;
     if ( acname[0] != 0 )
     {
         if ( refcoin[0] != 0 && strcmp(refcoin,"KMD") != 0 )
@@ -331,7 +333,7 @@ cJSON *get_komodocli(char *refcoin,char **retstrp,char *acname,char *method,char
     system(cmdstr);
     *retstrp = 0;
     if ( (jsonstr= filestr(&fsize,fname)) != 0 )
-    {       
+    {
         jsonstr[strlen(jsonstr)-1]='\0';
         //fprintf(stderr,"%s -> jsonstr.(%s)\n",cmdstr,jsonstr);
         if ( (jsonstr[0] != '{' && jsonstr[0] != '[') || (retjson= cJSON_Parse(jsonstr)) == 0 )
@@ -599,13 +601,13 @@ int32_t validateaddress(char *refcoin,char *acname,char *depositaddr, char* comp
     cJSON *retjson; char *retstr; int32_t res=0;
     if ( (retjson= get_komodocli(refcoin,&retstr,acname,"validateaddress",depositaddr,"","","")) != 0 )
     {
-        if (is_cJSON_True(jobj(retjson,compare)) != 0 ) res=1;        
+        if (is_cJSON_True(jobj(retjson,compare)) != 0 ) res=1;
         free_json(retjson);
     }
     else if ( retstr != 0 )
     {
         fprintf(stderr,"validateaddress.(%s) %s error.(%s)\n",refcoin,acname,retstr);
-        free(retstr);        
+        free(retstr);
     }
     return (res);
 }
@@ -647,21 +649,58 @@ int64_t z_getbalance(char *refcoin,char *acname,char *coinaddr)
     return (amount);
 }
 
-int32_t getnewaddress(char *coinaddr,char *refcoin,char *acname)
+int32_t z_exportkey(char *privkey,char *refcoin,char *acname,char *zaddr)
 {
-    cJSON *retjson; char *retstr; int64_t amount=0;
-    if ( (retjson= get_komodocli(refcoin,&retstr,acname,"getnewaddress","","","","")) != 0 )
+    cJSON *retjson; char *retstr,cmpstr[64]; int64_t amount=0;
+    privkey[0] = 0;
+    if ( (retjson= get_komodocli(refcoin,&retstr,acname,"z_exportkey",zaddr,"","","")) != 0 )
     {
-        fprintf(stderr,"getnewaddress.(%s) %s returned json!\n",refcoin,acname);
+        fprintf(stderr,"z_exportkey.(%s) %s returned json!\n",refcoin,acname);
         free_json(retjson);
         return(-1);
     }
     else if ( retstr != 0 )
     {
-        strcpy(coinaddr,retstr);
+        //printf("retstr %s -> %.8f\n",retstr,dstr(amount));
+        strcpy(privkey,retstr);
         free(retstr);
         return(0);
     }
+    return(-1);
+}
+
+int32_t getnewaddress(char *coinaddr,char *refcoin,char *acname)
+{
+    cJSON *retjson; char *retstr; int64_t amount=0; int32_t retval = -1;
+    if ( (retjson= get_komodocli(refcoin,&retstr,acname,"getnewaddress","","","","")) != 0 )
+    {
+        fprintf(stderr,"getnewaddress.(%s) %s returned json!\n",refcoin,acname);
+        free_json(retjson);
+    }
+    else if ( retstr != 0 )
+    {
+        strcpy(coinaddr,retstr);
+        free(retstr);
+        retval = 0;
+    }
+    return(retval);
+}
+
+int32_t z_getnewaddress(char *coinaddr,char *refcoin,char *acname,char *typestr)
+{
+    cJSON *retjson; char *retstr; int64_t amount=0; int32_t retval = -1;
+    if ( (retjson= get_komodocli(refcoin,&retstr,acname,"z_getnewaddress",typestr,"","","")) != 0 )
+    {
+        fprintf(stderr,"z_getnewaddress.(%s) %s returned json!\n",refcoin,acname);
+        free_json(retjson);
+    }
+    else if ( retstr != 0 )
+    {
+        strcpy(coinaddr,retstr);
+        free(retstr);
+        retval = 0;
+    }
+    return(retval);
 }
 
 int64_t find_onetime_amount(char *coinstr,char *coinaddr)
@@ -670,11 +709,16 @@ int64_t find_onetime_amount(char *coinstr,char *coinaddr)
     coinaddr[0] = 0;
     if ( (array= get_listunspent(coinstr,"")) != 0 )
     {
+        //printf("got listunspent.(%s)\n",jprint(array,0));
         if ( (n= cJSON_GetArraySize(array)) > 0 )
         {
             for (i=0; i<n; i++)
             {
                 item = jitem(array,i);
+                if (is_cJSON_False(jobj(item, "spendable")) != 0)
+                {
+                    continue;
+                }
                 if ( (addr= jstr(item,"address")) != 0 )
                 {
                     strcpy(coinaddr,addr);
@@ -731,22 +775,44 @@ void importaddress(char *refcoin,char *acname,char *depositaddr)
 
 int32_t z_sendmany(char *opidstr,char *coinstr,char *acname,char *srcaddr,char *destaddr,int64_t amount)
 {
-    cJSON *retjson; char *retstr,params[1024],addr[128];
+    cJSON *retjson; char *retstr,params[1024],addr[128]; int32_t retval = -1;
     sprintf(params,"'[{\"address\":\"%s\",\"amount\":%.8f}]'",destaddr,dstr(amount));
     sprintf(addr,"\"%s\"",srcaddr);
+    printf("z_sendmany from.(%s) -> %s\n",srcaddr,params);
     if ( (retjson= get_komodocli(coinstr,&retstr,acname,"z_sendmany",addr,params,"","")) != 0 )
     {
         printf("unexpected json z_sendmany.(%s)\n",jprint(retjson,0));
         free_json(retjson);
-        return(-1);
     }
     else if ( retstr != 0 )
     {
         fprintf(stderr,"z_sendmany.(%s) -> opid.(%s)\n",coinstr,retstr);
         strcpy(opidstr,retstr);
         free(retstr);
-        return(0);
+        retval = 0;
     }
+    return(retval);
+}
+
+int32_t z_mergetoaddress(char *opidstr,char *coinstr,char *acname,char *destaddr)
+{
+    cJSON *retjson; char *retstr,addr[128],*opstr; int32_t retval = -1;
+    sprintf(addr,"[\\\"ANY_SPROUT\\\"]");
+    if ( (retjson= get_komodocli(coinstr,&retstr,acname,"z_mergetoaddress",addr,destaddr,"","")) != 0 )
+    {
+        if ( (opstr= jstr(retjson,"opid")) != 0 )
+            strcpy(opidstr,opstr);
+        retval = jint(retjson,"remainingNotes");
+        fprintf(stderr,"%s\n",jprint(retjson,0));
+        free_json(retjson);
+    }
+    else if ( retstr != 0 )
+    {
+        fprintf(stderr,"z_mergetoaddress.(%s) -> opid.(%s)\n",coinstr,retstr);
+        strcpy(opidstr,retstr);
+        free(retstr);
+    }
+    return(retval);
 }
 
 int32_t empty_mempool(char *coinstr,char *acname)
@@ -797,7 +863,7 @@ int32_t tx_has_voutaddress(char *refcoin,char *acname,bits256 txid,char *coinadd
         if ( (vouts= jarray(&numarray,txobj,"vout")) != 0 )
         {
             for (i=0; i<numarray; i++)
-            {            
+            {
                 if ((vout = jitem(vouts,i)) !=0 && (sobj= jobj(vout,"scriptPubKey")) != 0 )
                 {
                     if ( (addresses= jarray(&n,sobj,"addresses")) != 0 )
@@ -818,7 +884,7 @@ int32_t tx_has_voutaddress(char *refcoin,char *acname,bits256 txid,char *coinadd
             }
         }
         // if (hasvout==1 && (vins=jarray(&numarray,txobj,"vin"))!=0)
-        // {                          
+        // {
         //     for (int i=0;i<numarray;i++)
         //     {
         //         if ((vin=jitem(vins,i))!=0 && validateaddress(refcoin,acname,jstr(vin,"address"),"ismine")!=0)
@@ -826,7 +892,7 @@ int32_t tx_has_voutaddress(char *refcoin,char *acname,bits256 txid,char *coinadd
         //             retval=1;
         //             break;
         //         }
-        //     }                       
+        //     }
         // }
         free_json(txobj);
     }
@@ -874,7 +940,500 @@ int32_t have_pending_opid(char *coinstr,int32_t clearresults)
     return(pending);
 }
 
+int64_t utxo_value(char *refcoin,char *srcaddr,bits256 txid,int32_t v)
+{
+    cJSON *txjson,*vouts,*vout,*sobj,*array; int32_t numvouts,numaddrs; int64_t val,value = 0; char *addr,str[65];
+    srcaddr[0] = 0;
+    if ( (txjson= get_rawtransaction(refcoin,"",txid)) != 0 )
+    {
+        if ( (vouts= jarray(&numvouts,txjson,"vout")) != 0 && v < numvouts )
+        {
+            vout = jitem(vouts,v);
+            if ( (val= jdouble(vout,"value")*SATOSHIDEN) != 0 && (sobj= jobj(vout,"scriptPubKey")) != 0 )
+            {
+                if ( (array= jarray(&numaddrs,sobj,"addresses")) != 0 && numaddrs == 1 && (addr= jstri(array,0)) != 0 && strlen(addr) < 64 )
+                {
+                    strcpy(srcaddr,addr);
+                    value = val;
+                } else printf("couldnt get unique address for %s/%d\n",bits256_str(str,txid),v);
+            } else printf("error getting value for %s/v%d\n",bits256_str(str,txid),v);
+        }
+    }
+    return(value);
+}
+
+int32_t verify_vin(char *refcoin,bits256 txid,int32_t v,char *cmpaddr)
+{
+    cJSON *txjson,*vins,*vin; int32_t numvins; char vinaddr[64],str[65];
+    vinaddr[0] = 0;
+    if ( (txjson= get_rawtransaction(refcoin,"",txid)) != 0 )
+    {
+        if ( (vins= jarray(&numvins,txjson,"vin")) != 0 && v < numvins )
+        {
+            vin = jitem(vins,v);
+            if ( utxo_value(refcoin,vinaddr,jbits256(vin,"txid"),jint(vin,"vout")) > 0 && strcmp(vinaddr,cmpaddr) == 0 )
+                return(0);
+            printf("mismatched vinaddr.(%s) vs %s\n",vinaddr,cmpaddr);
+        }
+    }
+    return(-1);
+}
+
+int32_t txid_in_vins(char *refcoin,bits256 txid,bits256 cmptxid)
+{
+    cJSON *txjson,*vins,*vin; int32_t numvins,v,vinvout; bits256 vintxid; char str[65];
+    if ( (txjson= get_rawtransaction(refcoin,"",txid)) != 0 )
+    {
+        if ( (vins= jarray(&numvins,txjson,"vin")) != 0 )
+        {
+            for (v=0; v<numvins; v++)
+            {
+                vin = jitem(vins,v);
+                vintxid = jbits256(vin,"txid");
+                vinvout = jint(vin,"vout");
+                if ( memcmp(&vintxid,&cmptxid,sizeof(vintxid)) == 0 && vinvout == 0 )
+                {
+                    return(0);
+                }
+            }
+        }
+    }
+    return(-1);
+}
+
+void genpayout(char *coinstr,char *destaddr,int32_t amount)
+{
+    char cmd[1024];
+    sprintf(cmd,"curl -s --url \"http://127.0.0.1:7783\" --data \"{\\\"userpass\\\":\\\"$userpass\\\",\\\"method\\\":\\\"withdraw\\\",\\\"coin\\\":\\\"%s\\\",\\\"outputs\\\":[{\\\"%s\\\":%.8f},{\\\"RWXL82m4xnBTg1kk6PuS2xekonu7oEeiJG\\\":0.0002}],\\\"broadcast\\\":1}\"\nsleep 3\n",coinstr,destaddr,dstr(amount+20000));
+    printf("%s",cmd);
+}
+
+bits256 SECONDVIN; int32_t SECONDVOUT;
+
+void genrefund(char *cmd,char *coinstr,bits256 vintxid,char *destaddr,int64_t amount)
+{
+    char str[65],str2[65];
+    sprintf(cmd,"curl -s --url \"http://127.0.0.1:7783\" --data \"{\\\"userpass\\\":\\\"$userpass\\\",\\\"method\\\":\\\"withdraw\\\",\\\"coin\\\":\\\"%s\\\",\\\"onevin\\\":2,\\\"utxotxid\\\":\\\"%s\\\",\\\"utxovout\\\":1,\\\"utxotxid2\\\":\\\"%s\\\",\\\"utxovout2\\\":%d,\\\"outputs\\\":[{\\\"%s\\\":%.8f}],\\\"broadcast\\\":1}\"\nsleep 3\n",coinstr,bits256_str(str,vintxid),bits256_str(str2,SECONDVIN),SECONDVOUT,destaddr,dstr(amount));
+    system(cmd);
+}
+
+struct addritem
+{
+    int64_t total,numutxos;
+    char addr[64];
+    
+} ADDRESSES[1200];
+
+struct claimitem
+{
+    bits256 txid;
+    int64_t total,refundvalue;
+    int32_t numutxos,disputed,approved;
+    char oldaddr[64],destaddr[64],username[64];
+    
+} CLAIMS[10000];
+
+int32_t NUM_ADDRESSES,NUM_CLAIMS;
+
+int32_t itemvalid(char *refcoin,int64_t *refundedp,int64_t *waitingp,struct claimitem *item)
+{
+    cJSON *curljson,*txids; int32_t i,numtxids; char str[65],str2[65],url[1000],*retstr; bits256 txid;
+    *refundedp = *waitingp = 0;
+    if ( item->refundvalue < 0 )
+        return(-1);
+    sprintf(url,"https://kmd.explorer.dexstats.info/insight-api-komodo/addr/%s",item->destaddr);
+    if ( (retstr= send_curl(url,"/tmp/itemvalid")) != 0 )
+    {
+        if ( (curljson= cJSON_Parse(retstr)) != 0 )
+        {
+            if ( (txids= jarray(&numtxids,curljson,"transactions")) != 0 )
+            {
+                for (i=0; i<numtxids; i++)
+                {
+                    txid = jbits256i(txids,i);
+                    if ( txid_in_vins(refcoin,txid,item->txid) == 0 )
+                    {
+                        printf("found item->txid %s inside %s\n",bits256_str(str,item->txid),bits256_str(str2,txid));
+                        item->approved = 1;
+                        break;
+                    }
+                }
+            }
+            free_json(curljson);
+        }
+        //printf("%s\n",retstr);
+        free(retstr);
+    }
+    if ( item->approved != 0 )
+        return(1);
+    *waitingp = item->refundvalue;
+    return(-1);
+}
+
+void scan_claims(int32_t issueflag,char *refcoin,int32_t batchid)
+{
+    char str[65]; int32_t i,num,numstolen=0,numcandidates=0,numinvalids=0,numrefunded=0,numwaiting=0; struct claimitem *item; int64_t batchmin,batchmax,waiting,refunded,possiblerefund=0,possiblestolen = 0,invalidsum=0,totalrefunded=0,waitingsum=0;
+    if ( batchid == 0 )
+    {
+        batchmin = 0;
+        batchmax = 7 * SATOSHIDEN;
+    }
+    else if ( batchid == 1 )
+    {
+        batchmin = 7 * SATOSHIDEN;
+        batchmax = 777 * SATOSHIDEN;
+    }
+    else if ( batchid == 2 )
+    {
+        batchmin = 1;//777 * SATOSHIDEN;
+        batchmax = 47777 * SATOSHIDEN;
+    }
+    else if ( batchid == 3 )
+    {
+        batchmin = 47777 * SATOSHIDEN;
+        batchmax = 1000000 * SATOSHIDEN;
+    }
+    for (i=0; i<NUM_CLAIMS; i++)
+    {
+        item = &CLAIMS[i];
+        if ( item->refundvalue < batchmin || item->refundvalue >= batchmax )
+            continue;
+        if ( itemvalid(refcoin,&refunded,&waiting,item) < 0 )
+        {
+            if ( refunded != 0 )
+            {
+                numrefunded++;
+                totalrefunded += refunded;
+            }
+            else if ( waiting != 0 )
+            {
+                numwaiting++;
+                waitingsum += waiting;
+            }
+            else
+            {
+                invalidsum += item->refundvalue;
+                numinvalids++;
+            }
+            continue;
+        }
+        if ( item->total > item->refundvalue*1.05 + 10*SATOSHIDEN )
+        {
+            //if ( (item->total-item->refundvalue) > 777*SATOSHIDEN )
+            printf("possible.%d stolen %s %.8f vs refund %.8f -> %.8f\n",batchid,item->oldaddr,dstr(item->total),dstr(item->refundvalue),dstr(item->total)-dstr(item->refundvalue));
+            numstolen++;
+            possiblestolen += (item->total - item->refundvalue);
+            item->approved = 0;
+        }
+        else
+        {
+            printf("candidate.%d %s %.8f vs refund %.8f -> %s\n",batchid,item->oldaddr,dstr(item->total),dstr(item->refundvalue),item->destaddr);
+            numcandidates++;
+            possiblerefund += item->refundvalue;
+        }
+    }
+    printf("batchid.%d TOTAL exposure %d %.8f, possible refund %d %.8f, invalids %d %.8f, numrefunded %d %.8f, waiting %d %.8f\n",batchid,numstolen,dstr(possiblestolen),numcandidates,dstr(possiblerefund),numinvalids,dstr(invalidsum),numrefunded,dstr(totalrefunded),numwaiting,dstr(waitingsum));
+    for (i=num=0; i<NUM_CLAIMS; i++)
+    {
+        item = &CLAIMS[i];
+        if ( item->approved != 0 )
+        {
+            printf("%d.%d: approved.%d %s %.8f vs refund %.8f -> %s\n",i,num,batchid,item->oldaddr,dstr(item->total),dstr(item->refundvalue),item->destaddr);
+            num++;
+            if ( issueflag != 0 )
+            {
+                static FILE *fp; char cmd[1024];
+                if ( fp == 0 )
+                    fp = fopen("refund.log","wb");
+                genrefund(cmd,refcoin,item->txid,item->destaddr,item->refundvalue);
+                if ( fp != 0 )
+                {
+                    fprintf(fp,"%s,%s,%s,%s,%s,%.8f,%s\n",item->username,refcoin,bits256_str(str,item->txid),item->oldaddr,item->destaddr,dstr(item->refundvalue),cmd);
+                    fflush(fp);
+                }
+                memset(&SECONDVIN,0,sizeof(SECONDVIN));
+                SECONDVOUT = 1;
+//printf(">>>>>>>>>>>>>>>>>> getchar after (%s)\n",cmd);
+//getchar();
+            }
+        }
+    }
+}
+
+int32_t update_claimvalue(int32_t *disputedp,char *addr,int64_t amount,bits256 txid)
+{
+    int32_t i; struct claimitem *item;
+    *disputedp = 0;
+    for (i=0; i<NUM_CLAIMS; i++)
+    {
+        if ( strcmp(addr,CLAIMS[i].oldaddr) == 0 )
+        {
+            item = &CLAIMS[i];
+            item->refundvalue = amount;
+            if ( bits256_nonz(item->txid) != 0 )
+                printf("disputed.%d %s claimed %.8f vs %.8f\n",item->disputed,addr,dstr(item->total),dstr(amount));
+            item->txid = txid;
+            if ( item->disputed != 0 )
+                *disputedp = 1;
+            return(i);
+        }
+    }
+    return(-1);
+}
+
+int64_t update_claimstats(char *username,char *oldaddr,char *destaddr,int64_t amount)
+{
+    int32_t i; struct claimitem *item;
+    for (i=0; i<NUM_CLAIMS; i++)
+    {
+        if ( strcmp(oldaddr,CLAIMS[i].oldaddr) == 0 )
+        {
+            item = &CLAIMS[i];
+            if ( strcmp(destaddr,item->destaddr) != 0 )//|| strcmp(username,item->username) != 0 )
+            {
+                item->disputed++;
+                printf("disputed.%d claim.%-4d: (%36s -> %36s %s) vs. (%36s -> %36s %s) \n",item->disputed,i,oldaddr,destaddr,username,item->oldaddr,item->destaddr,item->username);
+            }
+            item->numutxos++;
+            item->total += amount;
+            return(amount);
+        }
+    }
+    item = &CLAIMS[NUM_CLAIMS++];
+    item->total = amount;
+    item->numutxos = 1;
+    strncpy(item->oldaddr,oldaddr,sizeof(item->oldaddr));
+    strncpy(item->destaddr,destaddr,sizeof(item->destaddr));
+    strncpy(item->username,username,sizeof(item->username));
+    printf("new claim.%-4d: %36s %16.8f -> %36s %s\n",NUM_CLAIMS,oldaddr,dstr(amount),destaddr,username);
+    return(amount);
+}
+
+int32_t update_addrstats(char *srcaddr,int64_t amount)
+{
+    int32_t i; struct addritem *item;
+    for (i=0; i<NUM_ADDRESSES; i++)
+    {
+        if ( strcmp(srcaddr,ADDRESSES[i].addr) == 0 )
+        {
+            ADDRESSES[i].numutxos++;
+            ADDRESSES[i].total += amount;
+            return(i);
+        }
+    }
+    item = &ADDRESSES[NUM_ADDRESSES++];
+    item->total = amount;
+    item->numutxos = 1;
+    strcpy(item->addr,srcaddr);
+    printf("%d new address %s\n",NUM_ADDRESSES,srcaddr);
+    return(-1);
+}
+
+int64_t sum_of_vins(char *refcoin,int32_t *totalvinsp,int32_t *uniqaddrsp,bits256 txid)
+{
+    cJSON *txjson,*vins,*vin; char str[65],srcaddr[64]; int32_t i,numarray; int64_t amount,total = 0;
+    if ( (txjson= get_rawtransaction(refcoin,"",txid)) != 0 )
+    {
+        if ( (vins= jarray(&numarray,txjson,"vin")) != 0)
+        {
+            for (i=0; i<numarray; i++)
+            {
+                if ( (vin= jitem(vins,i)) != 0 )
+                {
+                    if ( (amount= utxo_value(refcoin,srcaddr,jbits256(vin,"txid"),jint(vin,"vout"))) == 0 )
+                        printf("error getting value from %s/v%d\n",bits256_str(str,jbits256(vin,"txid")),jint(vin,"vout"));
+                    else
+                    {
+                        if ( update_addrstats(srcaddr,amount) < 0 )
+                            (*uniqaddrsp)++;
+                        //printf("add %s <- %.8f\n",srcaddr,dstr(amount));
+                        total += amount;
+                        (*totalvinsp)++;
+                    }
+                }
+            }
+        }
+    }
+    if ( total == 0 )
+        printf("sum_of_vins error %s\n",bits256_str(str,txid));
+    return(total);
+}
+
+void reconcile_claims(char *fname)
+{
+    FILE *fp; double amount; int32_t i,n,numlines = 0; char buf[1024],fields[16][256],*str; int64_t total = 0;
+    if ( (fp= fopen(fname,"rb")) != 0 )
+    {
+        while ( fgets(buf,sizeof(buf),fp) > 0 )
+        {
+            //printf("%d.(%s)\n",numlines,buf);
+            str = buf;
+            n = i = 0;
+            memset(fields,0,sizeof(fields));
+            while ( *str != 0 )
+            {
+                if ( *str == ',' || *str == '\n' || *str == '\r' )
+                {
+                    fields[n][i] = 0;
+                    i = 0;
+                    if ( n > 1 )
+                    {
+                        //printf("(%16s) ",fields[n]);
+                    }
+                    n++;
+                    if ( *str == '\n' || *str == '\r' )
+                        break;
+                }
+                if ( *str == ',' || *str == ' ' )
+                    str++;
+                else fields[n][i++] = *str++;
+            }
+            //printf("%s\n",fields[0]);
+            total += update_claimstats(fields[1],fields[3],fields[6],atof(fields[4])*SATOSHIDEN + 0.0000000049);
+            numlines++;
+        }
+        fclose(fp);
+    }
+    printf("total claims %.8f\n",dstr(total));
+}
+
 int32_t main(int32_t argc,char **argv)
+{
+    char *coinstr,*acstr,*addr,buf[64],srcaddr[64],str[65]; cJSON *retjson,*item; int32_t i,n,disputed,numdisputed,numsmall=0,numpayouts=0,numclaims=0,num=0,totalvins=0,uniqaddrs=0; int64_t amount,total = 0,total2 = 0,payout,maxpayout,smallpayout=0,totalpayout = 0,totaldisputed = 0,totaldisputed2 = 0,fundingamount = 0;
+    if ( argc != 2 )
+    {
+        printf("argc needs to be 2: <prog> coin\n");
+        return(-1);
+    }
+    if ( strcmp(argv[1],"KMD") == 0 )
+    {
+        REFCOIN_CLI = "./komodo-cli";
+        coinstr = clonestr("KMD");
+        acstr = "";
+    }
+    else
+    {
+        sprintf(buf,"./komodo-cli -ac_name=%s",argv[1]);
+        REFCOIN_CLI = clonestr(buf);
+        coinstr = clonestr(argv[1]);
+        acstr = coinstr;
+    }
+    if ( strcmp(coinstr,"KMD") == 0 )
+    {
+        sprintf(buf,"%s-Claims.csv",coinstr);
+        reconcile_claims(buf);
+        for (i=0; i<NUM_CLAIMS; i++)
+        {
+            if ( CLAIMS[i].disputed != 0 )
+            {
+                totaldisputed += CLAIMS[i].total;
+                printf("disputed %s %.8f\n",CLAIMS[i].oldaddr,dstr(CLAIMS[i].total));
+            }
+        }
+        printf("total disputed %.8f\n",dstr(totaldisputed));
+        totaldisputed2 = 0;
+        if ( (retjson=  get_listunspent(coinstr,acstr)) != 0 )
+        {
+            if ( (n= cJSON_GetArraySize(retjson)) > 0 )
+            {
+                for (i=0; i<n; i++)
+                {
+                    item = jitem(retjson,i);
+                    amount = jdouble(item,"amount")*SATOSHIDEN;
+                    if ( (addr= jstr(item,"address")) != 0 && strcmp(addr,"RWXL82m4xnBTg1kk6PuS2xekonu7oEeiJG") == 0 )
+                    {
+                        if ( amount != 20000 )
+                        {
+                            if ( amount > fundingamount )
+                            {
+                                fundingamount = amount;
+                                SECONDVIN = jbits256(item,"txid");
+                                SECONDVOUT = jint(item,"vout");
+                                printf("set SECONDVIN to %s/v%d %.8f\n",bits256_str(str,SECONDVIN),SECONDVOUT,dstr(amount));
+                            }
+                            continue;
+                        }
+                        if ( strcmp(coinstr,"KMD") == 0 && verify_vin(coinstr,jbits256(item,"txid"),0,"R9JCEd6xnCxNUSpLrHEWvzPSh7CNXm7z75") < 0 )
+                        {
+                            printf("WARNING: imposter dust detected! %s\n",bits256_str(str,jbits256(item,"txid")));
+                            continue;
+                        }
+                        else if ( strcmp(coinstr,"KMD") != 0 && verify_vin(coinstr,jbits256(item,"txid"),0,"R9MUnxXijovvSeT9sFuUX23TiFtVvZEGjT") < 0 )
+                        {
+                            printf("WARNING: imposter dust detected! %s\n",bits256_str(str,jbits256(item,"txid")));
+                            continue;
+                        }
+                        amount = (utxo_value(coinstr,srcaddr,jbits256(item,"txid"),0) - 20000) * SATOSHIDEN;
+                        //printf("%d: %s claimvalue %.8f\n",num,srcaddr,dstr(amount));
+                        num++;
+                        total2 += amount;
+                        if ( update_claimvalue(&disputed,srcaddr,amount,jbits256(item,"txid")) >= 0 )
+                        {
+                            if ( disputed != 0 )
+                            {
+                                totaldisputed2 += amount;
+                                numdisputed++;
+                            }
+                            else
+                            {
+                                numclaims++;
+                                total += amount;
+                            }
+                        }
+                    }
+                }
+            }
+            free_json(retjson);
+            printf("remaining refunds.%d %.8f, numclaims.%d %.8f, numdisputed.%d %.8f\n",num,dstr(total2),numclaims,dstr(total),numdisputed,dstr(totaldisputed2));
+        }
+        //scan_claims(0,coinstr,0);
+        //scan_claims(0,coinstr,1);
+        scan_claims(0,coinstr,2);
+        //scan_claims(0,coinstr,3);
+    }
+    else if ( (retjson= get_listunspent(coinstr,acstr)) != 0 )
+    {
+        if ( (n= cJSON_GetArraySize(retjson)) > 0 )
+        {
+            for (i=0; i<n; i++)
+            {
+                item = jitem(retjson,i);
+                if ( (addr= jstr(item,"address")) != 0 && strcmp(addr,"RSgD2cmm3niFRu2kwwtrEHoHMywJdkbkeF") == 0 )
+                {
+                    if ( (amount= jdouble(item,"amount")*SATOSHIDEN) != 0 )
+                    {
+                        num++;
+                        total += amount;
+                        total2 += sum_of_vins(coinstr,&totalvins,&uniqaddrs,jbits256(item,"txid"));
+                    }
+                }
+            }
+        }
+        free_json(retjson);
+        maxpayout = 0;
+        for (i=0; i<NUM_ADDRESSES; i++)
+        {
+            if ( ADDRESSES[i].total >= SATOSHIDEN )
+            {
+                payout = ADDRESSES[i].total / SATOSHIDEN;
+                if ( payout > maxpayout )
+                    maxpayout = payout;
+                totalpayout += payout;
+                numpayouts++;
+                //if ( payout >= 7 )
+                //{
+                //  numsmall++;
+                //smallpayout += payout;
+                    genpayout(coinstr,ADDRESSES[i].addr,payout);
+                //}
+                //printf("%-4d: %-64s numutxos.%-4lld %llu\n",i,ADDRESSES[i].addr,ADDRESSES[i].numutxos,(long long)payout);
+            }
+        }
+        printf("num.%d total %.8f vs vintotal %.8f, totalvins.%d uniqaddrs.%d:%d totalpayout %llu maxpayout %llu numpayouts.%d numsmall.%d %llu\n",num,dstr(total),dstr(total2),totalvins,uniqaddrs,NUM_ADDRESSES,(long long)totalpayout,(long long)maxpayout,numpayouts,numsmall,(long long)smallpayout);
+    }
+}
+    
+int32_t zmigratemain(int32_t argc,char **argv)
 {
     char buf[1024],*zsaddr,*coinstr;
     if ( argc != 3 )
@@ -905,10 +1464,25 @@ int32_t main(int32_t argc,char **argv)
     }
     zsaddr = clonestr(argv[2]);
     printf("%s: %s %s\n",REFCOIN_CLI,coinstr,zsaddr);
-    uint32_t lastopid; char coinaddr[64],zcaddr[128],opidstr[128]; int32_t finished; int64_t amount,stdamount,txfee;
-    stdamount = 10000 * SATOSHIDEN;
+    uint32_t lastopid; char coinaddr[64],privkey[1024],zcaddr[128],opidstr[128]; int32_t finished; int64_t amount,stdamount,txfee;
+    //stdamount = 500 * SATOSHIDEN;
     txfee = 10000;
 again:
+    if ( z_getnewaddress(zcaddr,coinstr,"","sprout") == 0 )
+    {
+        z_exportkey(privkey,coinstr,"",zcaddr);
+        printf("zcaddr.(%s) -> z_exportkey.(%s)\n",zcaddr,privkey);
+        while ( 1 )
+        {
+            if ( have_pending_opid(coinstr,0) != 0 )
+            {
+                sleep(10);
+                continue;
+            }
+            if ( z_mergetoaddress(opidstr,coinstr,"",zcaddr) <= 0 )
+                break;
+        }
+    }
     printf("start processing zmigrate\n");
     lastopid = (uint32_t)time(NULL);
     finished = 0;
@@ -916,7 +1490,7 @@ again:
     {
         if ( have_pending_opid(coinstr,0) != 0 )
         {
-            sleep(60);
+            sleep(10);
             continue;
         }
         if ( (amount= find_onetime_amount(coinstr,coinaddr)) > txfee )
@@ -930,14 +1504,33 @@ again:
         if ( (amount= find_sprout_amount(coinstr,zcaddr)) > txfee )
         {
             // generate taddr, send max of 10000.0001
-            if ( amount > stdamount+txfee )
-                amount = stdamount + txfee;
+            static int64_t lastamount,lastamount2,lastamount3,lastamount4,refamount = 5000 * SATOSHIDEN;
+            stdamount = refamount;
+            if ( amount == lastamount && amount == lastamount2 )
+            {
+                stdamount /= 10;
+                if ( amount == lastamount3 && amount == lastamount4 )
+                    stdamount /= 10;
+            }
+            if ( stdamount < SATOSHIDEN )
+            {
+                stdamount = SATOSHIDEN;
+                refamount = SATOSHIDEN * 50;
+            }
+            if ( stdamount < refamount )
+                refamount = stdamount;
+            lastamount4 = lastamount3;
+            lastamount3 = lastamount2;
+            lastamount2 = lastamount;
+            lastamount = amount;
+            if ( amount > stdamount+2*txfee )
+                amount = stdamount + 2*txfee;
             if ( getnewaddress(coinaddr,coinstr,"") == 0 )
             {
                 z_sendmany(opidstr,coinstr,"",zcaddr,coinaddr,amount-txfee);
                 lastopid = (uint32_t)time(NULL);
             } else printf("couldnt getnewaddress!\n");
-            sleep(30);
+            sleep(3);
             continue;
         }
         if ( time(NULL) > lastopid+600 )
