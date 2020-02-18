@@ -6268,8 +6268,8 @@ UniValue channelsopen(const UniValue& params, bool fHelp, const CPubKey& mypk)
     uint256 tokenid=zeroid; uint8_t notarize;
 
     cp = CCinit(&C,EVAL_CHANNELS);
-    if ( fHelp || params.size() < 3 || params.size() > 4)
-        throw runtime_error("channelsopen destpubkey numpayments payment [tokenid]\n");
+    if ( fHelp || params.size() < 3 || params.size() > 5)
+        throw runtime_error("channelsopen destpubkey numpayments payment [wait_for_confirmation] [tokenid]\n");
     if ( ensure_CCrequirements(EVAL_CHANNELS) < 0 )
         throw runtime_error(CC_REQUIREMENTS_MSG);
     Lock2NSPV(mypk);
@@ -6277,10 +6277,10 @@ UniValue channelsopen(const UniValue& params, bool fHelp, const CPubKey& mypk)
     numpayments = atoi(params[1].get_str().c_str());
     payment = atol(params[2].get_str().c_str());
     notarize=1;
-    if (params.size()==4) notarize=params[3].get_str().c_str()[0];
+    if (params.size()==4) notarize=params[3].get_str().c_str()[0]=='1'?1:0;
     else if (params.size()==5)
     {
-        notarize=params[3].get_str().c_str()[0];
+        notarize=params[3].get_str().c_str()[0]=='1'?1:0;
         tokenid=Parseuint256((char *)params[3].get_str().c_str());
     }
     result = ChannelOpen(mypk,0,pubkey2pk(destpub),numpayments,payment,notarize,tokenid);
