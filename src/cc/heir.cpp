@@ -371,7 +371,7 @@ uint8_t DecodeHeirEitherOpRet(CScript scriptPubKey, uint256 &tokenid, uint256 &f
 }
 
 // check if pubkey is in vins
-void CheckVinPubkey(std::vector<CTxIn> vins, CPubKey pubkey, bool &hasPubkey, bool &hasOtherPubkey) {
+/* void CheckVinPubkey(std::vector<CTxIn> vins, CPubKey pubkey, bool &hasPubkey, bool &hasOtherPubkey) {
 
 	hasPubkey = false;
 	hasOtherPubkey = false;
@@ -385,7 +385,7 @@ void CheckVinPubkey(std::vector<CTxIn> vins, CPubKey pubkey, bool &hasPubkey, bo
 				hasOtherPubkey = true;
 		}
 	}
-}
+} */
 
 /**
  * find the latest funding tx: it may be the first F tx or one of A or C tx's
@@ -424,12 +424,21 @@ uint256 _FindLatestFundingTx(uint256 fundingtxid, uint8_t& funcId, uint256 &toke
     
     // TODO: correct cc addr:
     std::vector<std::pair<CAddressUnspentKey, CAddressUnspentValue>> unspentOutputs;
-    struct CCcontract_info *cp, C;
+    /*struct CCcontract_info *cp, C;
     cp = CCinit(&C, EVAL_HEIR);
     char coinaddr[64];
     GetCCaddress1of2(cp, coinaddr, ownerPubkey, heirPubkey); // get the address of cryptocondition '1 of 2 pubkeys'
+    */
+
+    char coinaddr[KOMODO_ADDRESS_BUFSIZE];
+    if (tokenid.IsNull())
+        CoinHelper::GetCoinsOrTokensCCaddress1of2(coinaddr, ownerPubkey, heirPubkey);
+    else
+        TokenHelper::GetCoinsOrTokensCCaddress1of2(coinaddr, ownerPubkey, heirPubkey);
     
     SetCCunspents(unspentOutputs, coinaddr, true);				 // get vector with tx's with unspent vouts of 1of2pubkey address:
+    // std::cerr << __func__ << " unspents size=" << unspentOutputs.size() << '\n';
+
     
     int32_t maxBlockHeight = 0; // max block height
     uint256 latesttxid = fundingtxid;
@@ -440,13 +449,13 @@ uint256 _FindLatestFundingTx(uint256 fundingtxid, uint8_t& funcId, uint256 &toke
         uint256 hash;
         
         uint256 txid = it->first.txhash;
-        //std::cerr << "FindLatestFundingTx() checking unspents for txid=" << txid.GetHex() << '\n';
+        // std::cerr << __func__ << " checking unspents for txid=" << txid.GetHex() << '\n';
         
         int32_t blockHeight = (int32_t)it->second.blockHeight;
         
         //NOTE: maybe called from validation code:
         if (myGetTransaction(txid, regtx, hash)) {
-            //std::cerr << "FindLatestFundingTx() found tx for txid=" << txid.GetHex() << " blockHeight=" << blockHeight << " maxBlockHeight=" << maxBlockHeight << '\n';
+            // std::cerr << __func__ << " found tx for txid=" << txid.GetHex() << " blockHeight=" << blockHeight << " maxBlockHeight=" << maxBlockHeight << '\n';
             uint256 fundingTxidInOpret;
             uint256 tokenidInOpret;  // not to contaminate the tokenid from the params!
             uint8_t tmpFuncId;
@@ -462,16 +471,17 @@ uint256 _FindLatestFundingTx(uint256 fundingtxid, uint8_t& funcId, uint256 &toke
 					bool isOwner = false;
 					bool isNonOwner = false;
 
-					CheckVinPubkey(regtx.vin, ownerPubkey, isOwner, isNonOwner);
-
 					// we ignore 'donations' tx (with non-owner inputs) for calculating if heir is allowed to spend:
-					if (isOwner && !isNonOwner) {
+                    if (TotalPubkeyNormalInputs(regtx, ownerPubkey) > 0 || TotalPubkeyCCInputs(regtx, ownerPubkey) > 0)
+                    {
+					// CheckVinPubkey(regtx.vin, ownerPubkey, isOwner, isNonOwner);
+					// if (isOwner && !isNonOwner) {
 						hasHeirSpendingBegun = hasHeirSpendingBegunInOpret;
 						maxBlockHeight = blockHeight;
 						latesttxid = txid;
 						funcId = tmpFuncId;
 					}                    
-                    //std::cerr __func__ << << " txid=" << latesttxid.GetHex() << " at blockHeight=" << maxBlockHeight << " opreturn type=" << (char)(funcId ? funcId : ' ') << " hasHeirSpendingBegun=" << (int)hasHeirSpendingBegun << " - set as current lasttxid" << '\n';
+                    // std::cerr << __func__ << " txid=" << latesttxid.GetHex() << " at blockHeight=" << maxBlockHeight << " opreturn type=" << (char)(funcId ? funcId : ' ') << " hasHeirSpendingBegun=" << (int)hasHeirSpendingBegun << " - set as current lasttxid" << '\n';
                 }
             }
         }
@@ -651,13 +661,15 @@ template <typename Helper> UniValue _HeirFund(int64_t txfee, int64_t amount, std
         }
 
 		// check owner pubkey in vins
-		bool hasMypubkey = false;
-		bool hasNotMypubkey = false;
+		// bool hasMypubkey = false;
+		// bool hasNotMypubkey = false;
 
-		CheckVinPubkey(mtx.vin, myPubkey, hasMypubkey, hasNotMypubkey);
+		// CheckVinPubkey(mtx.vin, myPubkey, hasMypubkey, hasNotMypubkey);
 
 		// for initial funding do not allow to sign by non-owner key:
-		if (hasNotMypubkey) {
+		// if (hasNotMypubkey) {
+        if (TotalPubkeyNormalInputs(mtx, myPubkey) < amount && TotalPubkeyCCInputs(mtx, myPubkey) < amount)
+        {
 			result.push_back(Pair("result", "error"));
 			result.push_back(Pair("error", "using non-owner inputs not allowed"));
 			return result;
@@ -766,6 +778,7 @@ template <class Helper> UniValue _HeirAdd(uint256 fundingtxid, int64_t txfee, in
                 mtx.vout.push_back(Helper::makeUserVout(ccChange, myPubkey));
         }
 
+        /* CheckVinPubkey does not work for normals, switched to TotalPubkeyNormalInputs and TotalPubkeyCCInputs
 		// check owner pubkey in vins
 		bool hasMypubkey = false;
 		bool hasNotMypubkey = false;
@@ -777,10 +790,11 @@ template <class Helper> UniValue _HeirAdd(uint256 fundingtxid, int64_t txfee, in
 			result.push_back(Pair("result", "error"));
 			result.push_back(Pair("error", "using both owner and non-owner inputs is not allowed"));
 			return result;
-		}
+		}*/
             
 		// warn the user he's making a donation if this is all non-owner keys:
-		if (hasNotMypubkey) {
+		// if (hasNotMypubkey) {
+        if (TotalPubkeyNormalInputs(mtx, myPubkey) < amount && TotalPubkeyCCInputs(mtx, myPubkey) < amount)  {
 			result.push_back(Pair("result", "warning"));
 			result.push_back(Pair("warning", "you are about to make a donation to heir fund"));
 		}
@@ -875,7 +889,11 @@ template <typename Helper>UniValue _HeirClaim(uint256 fundingtxid, int64_t txfee
     int64_t inputs, change = 0;
     struct CCcontract_info *cp, C;
     
-    cp = CCinit(&C, EVAL_HEIR);
+    if (tokenid.IsNull())
+        cp = CCinit(&C, EVAL_HEIR);
+    else
+        cp = CCinit(&C, EVAL_TOKENS);
+
     if (txfee == 0)
         txfee = 10000;
     
@@ -885,7 +903,7 @@ template <typename Helper>UniValue _HeirClaim(uint256 fundingtxid, int64_t txfee
     // we do not need to find duration if spending already has begun
     if (!hasHeirSpendingBegun) {
         durationSec = CCduration(numblocks, latesttxid);
-        std::cerr << "HeirClaim() duration=" << durationSec << " inactivityTime=" << inactivityTimeSec << " numblocks=" << numblocks << std::endl;
+        // std::cerr << "HeirClaim() duration=" << durationSec << " inactivityTime=" << inactivityTimeSec << " numblocks=" << numblocks << std::endl;
     }
     
     // spending is allowed if there is already spending tx or inactivity time
@@ -969,18 +987,15 @@ template <typename Helper>UniValue _HeirClaim(uint256 fundingtxid, int64_t txfee
                 result.push_back(Pair("hex", rawhextx));
             }
             else {
-                std::cerr << "HeirAdd error in FinalizeCCtx" << std::endl;
                 result.push_back(Pair("result", "error"));
                 result.push_back(Pair("error", "sign error"));
             }
             
         } else {
-            fprintf(stderr, "HeirClaim() cant find Heir CC inputs\n");
             result.push_back(Pair("result", "error"));
             result.push_back(Pair("error", "can't find heir CC funding"));
         }
     } else {
-        fprintf(stderr, "HeirClaim() cant find sufficient user inputs for tx fee\n");
         result.push_back(Pair("result", "error"));
         result.push_back(Pair("error", "can't find sufficient user inputs to pay transaction fee"));
     }
@@ -1069,7 +1084,7 @@ UniValue HeirInfo(uint256 fundingtxid)
             int32_t numblocks;
             uint64_t durationSec = 0;
             
-            //std::cerr << __func__ << " latesttxid=" << latestFundingTxid.GetHex() << '\n';
+            std::cerr << __func__ << " latesttxid=" << latestFundingTxid.GetHex() << '\n';
             
             std::ostringstream stream;
             std::string msg;
