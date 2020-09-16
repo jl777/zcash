@@ -12,9 +12,8 @@ SPROUT_PKEY_NAME='sprout-proving.key'
 SPROUT_VKEY_NAME='sprout-verifying.key'
 SAPLING_SPEND_NAME='sapling-spend.params'
 SAPLING_OUTPUT_NAME='sapling-output.params'
-SAPLING_SPROUT_GROTH16_NAME='sprout-groth16.params'
-SPROUT_URL="https://z.cash/downloads"
-SPROUT_IPFS="/ipfs/QmZKKx7Xup7LiAtFRhYsE1M7waXcv9ir9eCECyXAFGxhEo"
+URL="https://z.cash/downloads"
+IPFS="/ipfs/QmZKKx7Xup7LiAtFRhYsE1M7waXcv9ir9eCECyXAFGxhEo"
 
 SHA256CMD="$(command -v sha256sum || echo shasum)"
 SHA256ARGS="$(command -v sha256sum >/dev/null || echo '-a 256')"
@@ -38,7 +37,7 @@ function fetch_wget {
 
     cat <<EOF
 
-Retrieving (wget): $SPROUT_URL/$filename
+Retrieving (wget): $URL/$filename
 EOF
 
     wget \
@@ -46,7 +45,7 @@ EOF
         --output-document="$dlname" \
         --continue \
         --retry-connrefused --waitretry=3 --timeout=30 \
-        "$SPROUT_URL/$filename"
+        "$URL/$filename"
 }
 
 function fetch_ipfs {
@@ -75,20 +74,20 @@ function fetch_curl {
 
     cat <<EOF
 
-Retrieving (curl): $SPROUT_URL/$filename
+Retrieving (curl): $URL/$filename
 EOF
 
     curl \
         --output "$dlname" \
         -# -L -C - \
-        "$SPROUT_URL/$filename"
+        "$URL/$filename"
 
 }
 
 function fetch_failure {
     cat >&2 <<EOF
 
-Failed to fetch the Zcash zkSNARK parameters!
+Failed to fetch the Komodo zkSNARK parameters!
 Try installing one of the following programs and make sure you're online:
 
  * ipfs
@@ -159,9 +158,9 @@ function main() {
     || exit_locked_error
 
     cat <<EOF
-Zcash - fetch-params.sh
+Komodo - fetch-params.sh
 
-This script will fetch the Zcash zkSNARK parameters and verify their
+This script will fetch the zkSNARK parameters and verify their
 integrity with sha256sum.
 
 If they already exist locally, it will exit now and do nothing else.
@@ -182,7 +181,7 @@ EOF
         # This may be the first time the user's run this script, so give
         # them some info, especially about bandwidth usage:
         cat <<EOF
-The parameters are currently just under 911MB in size, so plan accordingly
+The parameters are currently about 960MB in size, so plan accordingly
 for your bandwidth constraints. If the files are already present and
 have the correct sha256sum, no networking is used.
 
@@ -201,7 +200,7 @@ EOF
     # Sapling parameters:
     fetch_params "$SAPLING_SPEND_NAME" "$PARAMS_DIR/$SAPLING_SPEND_NAME" "8e48ffd23abb3a5fd9c5589204f32d9c31285a04b78096ba40a79b75677efc13"
     fetch_params "$SAPLING_OUTPUT_NAME" "$PARAMS_DIR/$SAPLING_OUTPUT_NAME" "2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4"
-    fetch_params "$SAPLING_SPROUT_GROTH16_NAME" "$PARAMS_DIR/$SAPLING_SPROUT_GROTH16_NAME" "b685d700c60328498fbde589c8c7c484c722b788b265b72af448a5bf0ee55b50"
+
 }
 
 main
