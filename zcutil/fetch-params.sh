@@ -1,20 +1,21 @@
 #!/bin/bash
+# Copyright 2019 The Hush developers
 
 set -eu
 
+# We do not declare our own location because we can use the params
+# from any other installed coins
 if [[ "$OSTYPE" == "darwin"* ]]; then
     PARAMS_DIR="$HOME/Library/Application Support/ZcashParams"
 else
     PARAMS_DIR="$HOME/.zcash-params"
 fi
 
-SPROUT_PKEY_NAME='sprout-proving.key'
-SPROUT_VKEY_NAME='sprout-verifying.key'
 SAPLING_SPEND_NAME='sapling-spend.params'
 SAPLING_OUTPUT_NAME='sapling-output.params'
 SAPLING_SPROUT_GROTH16_NAME='sprout-groth16.params'
-SPROUT_URL="https://z.cash/downloads"
-SPROUT_IPFS="/ipfs/QmZKKx7Xup7LiAtFRhYsE1M7waXcv9ir9eCECyXAFGxhEo"
+URL="https://z.cash/downloads"
+IPFS="/ipfs/QmZKKx7Xup7LiAtFRhYsE1M7waXcv9ir9eCECyXAFGxhEo"
 
 SHA256CMD="$(command -v sha256sum || echo shasum)"
 SHA256ARGS="$(command -v sha256sum >/dev/null || echo '-a 256')"
@@ -38,7 +39,7 @@ function fetch_wget {
 
     cat <<EOF
 
-Retrieving (wget): $SPROUT_URL/$filename
+Retrieving (wget): $URL/$filename
 EOF
 
     wget \
@@ -46,7 +47,7 @@ EOF
         --output-document="$dlname" \
         --continue \
         --retry-connrefused --waitretry=3 --timeout=30 \
-        "$SPROUT_URL/$filename"
+        "$URL/$filename"
 }
 
 function fetch_ipfs {
@@ -59,10 +60,10 @@ function fetch_ipfs {
 
     cat <<EOF
 
-Retrieving (ipfs): $SPROUT_IPFS/$filename
+Retrieving (ipfs): $IPFS/$filename
 EOF
 
-    ipfs get --output "$dlname" "$SPROUT_IPFS/$filename"
+    ipfs get --output "$dlname" "$IPFS/$filename"
 }
 
 function fetch_curl {
@@ -75,13 +76,13 @@ function fetch_curl {
 
     cat <<EOF
 
-Retrieving (curl): $SPROUT_URL/$filename
+Retrieving (curl): $URL/$filename
 EOF
 
     curl \
         --output "$dlname" \
         -# -L -C - \
-        "$SPROUT_URL/$filename"
+        "$URL/$filename"
 
 }
 
@@ -159,30 +160,29 @@ function main() {
     || exit_locked_error
 
     cat <<EOF
-Zcash - fetch-params.sh
+Pirate - fetch-params.sh
 
-This script will fetch the Zcash zkSNARK parameters and verify their
-integrity with sha256sum.
+This script will fetch the zkSNARK parameters used in shielded
+transactions and verify their integrity with sha256sum.
 
 If they already exist locally, it will exit now and do nothing else.
 EOF
 
     # Now create PARAMS_DIR and insert a README if necessary:
-    if ! [ -d "$PARAMS_DIR" ]
-    then
+    if ! [ -d "$PARAMS_DIR" ]; then
         mkdir -p "$PARAMS_DIR"
         README_PATH="$PARAMS_DIR/README"
         cat >> "$README_PATH" <<EOF
-This directory stores common Zcash zkSNARK parameters. Note that it is
-distinct from the daemon's -datadir argument because the parameters are
-large and may be shared across multiple distinct -datadir's such as when
-setting up test networks.
+This directory stores common zkSNARK parameters needed for shielded
+transactions. Note that it is distinct from the daemon's -datadir argument
+because the parameters are large and may be shared across multiple distinct
+-datadir's such as when setting up test networks.
 EOF
 
         # This may be the first time the user's run this script, so give
         # them some info, especially about bandwidth usage:
         cat <<EOF
-The parameters are currently just under 911MB in size, so plan accordingly
+The parameters are currently about 750MB, so plan accordingly
 for your bandwidth constraints. If the files are already present and
 have the correct sha256sum, no networking is used.
 
@@ -194,14 +194,11 @@ EOF
 
     cd "$PARAMS_DIR"
 
-    # Sprout parameters:
-    fetch_params "$SPROUT_PKEY_NAME" "$PARAMS_DIR/$SPROUT_PKEY_NAME" "8bc20a7f013b2b58970cddd2e7ea028975c88ae7ceb9259a5344a16bc2c0eef7"
-    fetch_params "$SPROUT_VKEY_NAME" "$PARAMS_DIR/$SPROUT_VKEY_NAME" "4bd498dae0aacfd8e98dc306338d017d9c08dd0918ead18172bd0aec2fc5df82"
-
     # Sapling parameters:
     fetch_params "$SAPLING_SPEND_NAME" "$PARAMS_DIR/$SAPLING_SPEND_NAME" "8e48ffd23abb3a5fd9c5589204f32d9c31285a04b78096ba40a79b75677efc13"
     fetch_params "$SAPLING_OUTPUT_NAME" "$PARAMS_DIR/$SAPLING_OUTPUT_NAME" "2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4"
     fetch_params "$SAPLING_SPROUT_GROTH16_NAME" "$PARAMS_DIR/$SAPLING_SPROUT_GROTH16_NAME" "b685d700c60328498fbde589c8c7c484c722b788b265b72af448a5bf0ee55b50"
+
 }
 
 main
